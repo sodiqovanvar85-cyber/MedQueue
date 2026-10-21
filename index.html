@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DocTime UZ — Yagona Elektron Navbat Tizimi</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="min-h-screen bg-[#f4fbf9] text-slate-800 flex flex-col font-sans pb-20 md:pb-0">
+
+  <!-- Xabarnoma (Toast) -->
+  <div id="toast" class="fixed bottom-20 md:bottom-5 right-4 left-4 md:left-auto z-50 hidden items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl border border-teal-500/40">
+    <div class="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-400/30 flex items-center justify-center text-teal-300 shrink-0">
+      <i data-lucide="sparkles" class="w-4 h-4"></i>
+    </div>
+    <span id="toast-msg" class="text-sm font-medium"></span>
+  </div>
+
+  <!-- HEADER (Panellar qatori) -->
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-teal-100/80 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-2">
+      <button onclick="switchTab('home')" class="flex items-center gap-2.5 sm:gap-3 group focus:outline-none text-left shrink-0">
+        <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white shadow-lg shadow-teal-500/25 group-hover:scale-105 transition-transform">
+          <i data-lucide="stethoscope" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        </div>
+        <div>
+          <div class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 flex items-center">
+            Doc<span class="text-teal-600">Time</span>
+            <span class="ml-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">UZ</span>
+          </div>
+          <p class="text-[11px] text-slate-500 hidden xl:block">Yagona elektron navbat tizimi</p>
+        </div>
+      </button>
+
+      <!-- 5 ta panel tugmalari -->
+      <nav class="hidden md:flex items-center gap-1 bg-teal-50/80 p-1.5 rounded-2xl border border-teal-100">
+        <button id="nav-home" onclick="switchTab('home')" class="nav-btn active-nav px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
+          <i data-lucide="calendar" class="w-4 h-4"></i>
+          <span>Qabulga yozilish</span>
+        </button>
+
+        <button id="nav-tablo" onclick="switchTab('tablo')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
+          <i data-lucide="tv" class="w-4 h-4 text-emerald-600"></i>
+          <span>Jonli Tablo</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+        </button>
+
+        <button id="nav-tickets" onclick="switchTab('tickets')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
+          <i data-lucide="qr-code" class="w-4 h-4"></i>
+          <span>Mening talonim</span>
+          <span id="my-ticket-badge" class="px-1.5 py-0.5 text-[11px] rounded-full bg-teal-600 text-white font-bold">1</span>
+        </button>
+
+        <button id="nav-doctor" onclick="switchTab('doctor')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
+          <i data-lucide="user-check" class="w-4 h-4 text-teal-600"></i>
+          <span>Shifokor paneli</span>
+        </button>
+
+        <button id="nav-admin" onclick="switchTab('admin')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
+          <i data-lucide="shield-check" class="w-4 h-4 text-amber-600"></i>
+          <span>Admin panel</span>
+        </button>
+      </nav>
+
+      <div class="flex items-center gap-2">
+        <div class="flex items-center gap-1.5 bg-slate-100/90 px-3 py-1.5 rounded-xl border border-slate-200/70 text-xs font-semibold text-slate-600">
+          <i data-lucide="clock" class="w-3.5 h-3.5 text-teal-600"></i>
+          <span id="live-clock">00:00</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ASOSIY KONTENT -->
+  <main class="flex-1">
+
+    <!-- 1-BO'LIM: QABULGA YOZILISH -->
+    <div id="tab-home" class="tab-section">
+      <section class="relative overflow-hidden pt-6 pb-10 sm:pt-12 sm:pb-16 bg-gradient-to-b from-teal-50/90 via-[#f4fbf9] to-[#f4fbf9]">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
+            <div class="lg:col-span-7 space-y-4 sm:space-y-6">
+              <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-teal-100/80 border border-teal-200 text-teal-800 text-xs sm:text-sm font-semibold">
+                <span class="w-2 h-2 rounded-full bg-teal-600 animate-pulse"></span>
+                O'zbekistonning 12 viloyati bo'ylab shifokorlar bazasi
+              </div>
+
+              <h1 class="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-slate-900 tracking-tight leading-[1.12]">
+                Shifokorga <span class="bg-gradient-to-r from-teal-600 via-emerald-600 to-cyan-600 bg-clip-text text-transparent">bo'sh vaqtni tanlab</span> navbatsiz kiring
+              </h1>
+
+              <p class="text-sm sm:text-lg text-slate-600 max-w-2xl leading-relaxed">
+                Viloyat va tumaningizni tanlang — har bir shifokorning <strong>real vaqtdagi bo'sh soatlarini</strong> ko'ring. O'zingizga qulay soatni belgilab, shifoxonada kutmasdan kiring.
+              </p>
+
+              <div class="grid grid-cols-3 gap-2.5 sm:gap-3 pt-1 max-w-xl">
+                <div class="flex items-center gap-2 bg-white px-3 py-2.5 rounded-2xl border border-teal-100 shadow-sm">
+                  <div class="w-8 h-8 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                    <i data-lucide="building-2" class="w-4 h-4"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-xs font-bold text-slate-800 truncate">Davlat va xususiy</div>
+                    <div class="text-[10px] text-slate-500 truncate">Barcha klinikalar</div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 bg-white px-3 py-2.5 rounded-2xl border border-teal-100 shadow-sm">
+                  <div class="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <i data-lucide="calendar-check" class="w-4 h-4"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-xs font-bold text-slate-800 truncate">Bo'sh vaqtlar</div>
+                    <div class="text-[10px] text-slate-500 truncate">Onlayn jadval</div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 bg-white px-3 py-2.5 rounded-2xl border border-teal-100 shadow-sm">
+                  <div class="w-8 h-8 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center shrink-0">
+                    <i data-lucide="map-pin" class="w-4 h-4"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <div class="text-xs font-bold text-slate-800 truncate">12 ta viloyat</div>
+                    <div class="text-[10px] text-slate-500 truncate">To'liq qamrov</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="lg:col-span-5">
+              <div class="bg-white rounded-3xl p-5 sm:p-7 shadow-xl shadow-teal-900/5 border border-teal-100">
+                <div class="flex items-center gap-3.5 mb-5">
+                  <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 text-white flex items-center justify-center shadow-md shadow-teal-500/20 shrink-0">
+                    <i data-lucide="map-pin" class="w-5 h-5"></i>
+                  </div>
+                  <div>
+                    <h2 class="text-lg sm:text-xl font-bold text-slate-900">Joylashuvingiz</h2>
+                    <p class="text-xs sm:text-sm text-slate-500">12 ta viloyatdan o'z hududingizni tanlang</p>
+                  </div>
+                </div>
+
+                <div class="space-y-3.5">
+                  <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">1. Viloyatni tanlang (12 ta viloyat)</label>
+                    <select id="region-select" onchange="handleRegionChange()" class="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all">
+                      <option value="">Barcha viloyatlar (12 ta)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">2. Tuman yoki shaharni tanlang</label>
+                    <select id="district-select" onchange="renderDoctors()" disabled class="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                      <option value="">Avval viloyatni tanlang</option>
+                    </select>
+                  </div>
+
+                  <div class="pt-1 flex items-center justify-between text-xs text-slate-500">
+                    <span>Topilgan mutaxassislar:</span>
+                    <span id="found-count" class="font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200">13 ta shifokor</span>
+                  </div>
+
+                  <a href="#doctors-section" class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-center shadow-lg shadow-teal-600/25 flex items-center justify-center gap-2 transition-all text-sm">
+                    <i data-lucide="search" class="w-4 h-4"></i>
+                    <span>Bo'sh vaqtlarni ko'rish</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="doctors-section" class="py-6 sm:py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="bg-white rounded-3xl p-4 sm:p-6 shadow-sm border border-teal-100 mb-6 space-y-4">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900">Shifokorlar va bo'sh vaqtlar jadvali</h2>
+              <p class="text-xs sm:text-sm text-slate-500">Yashil rangdagi bo'sh soat ustiga bosib, to'g'ridan-to'g'ri o'sha vaqtga yozilishingiz mumkin</p>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="relative flex-1 sm:w-64">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+                <input id="search-input" oninput="renderDoctors()" type="text" placeholder="Shifokor, viloyat, klinika..." class="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white" />
+              </div>
+            </div>
+          </div>
+
+          <div id="specialty-pills" class="flex items-center gap-2 overflow-x-auto pb-1.5 no-scrollbar"></div>
+        </div>
+
+        <div id="doctors-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      </section>
+    </div>
+
+    <!-- 2-BO'LIM: JONLI TABLO -->
+    <div id="tab-tablo" class="tab-section hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-teal-500/30">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-2xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-teal-400">
+              <i data-lucide="tv" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">SHIFOXONA JONLI NAVBAT TABLOSI</h2>
+              <p class="text-xs sm:text-sm text-slate-400">Koridor ekrani — Bemorlarni xonalarga chaqirish monitori</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+            JONLI EFIR
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div class="bg-slate-800/70 rounded-2xl p-5 border border-emerald-500/30">
+            <h3 class="text-sm font-extrabold uppercase tracking-wider text-emerald-400 mb-4 flex items-center gap-2">
+              <i data-lucide="volume-2" class="w-4 h-4"></i> Hozir shifokor xonasida (Kiring)
+            </h3>
+            <div id="tablo-inprogress" class="space-y-3"></div>
+          </div>
+
+          <div class="bg-slate-800/70 rounded-2xl p-5 border border-amber-500/30">
+            <h3 class="text-sm font-extrabold uppercase tracking-wider text-amber-400 mb-4 flex items-center gap-2">
+              <i data-lucide="clock" class="w-4 h-4"></i> Navbatda kutayotganlar (Tayyorlaning)
+            </h3>
+            <div id="tablo-waiting" class="space-y-3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3-BO'LIM: MENING TALONIM -->
+    <div id="tab-tickets" class="tab-section hidden max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-slate-100">
+          <div>
+            <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900">Mening elektron talonlarim</h2>
+            <p class="text-xs sm:text-sm text-slate-500">O'zingizdan oldin nechta odam qolganini kuzating yoki navbatni bekor qiling</p>
+          </div>
+          <div class="w-full sm:w-64">
+            <input id="ticket-search-input" oninput="renderMyTickets()" type="text" placeholder="Tel raqam yoki talon kodi (K-012)..." class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+        </div>
+        <div id="my-tickets-list" class="space-y-4"></div>
+      </div>
+    </div>
+
+    <!-- 4-BO'LIM: SHIFOKOR PANELI -->
+    <div id="tab-doctor" class="tab-section hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div id="doctor-login-box" class="max-w-md mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-teal-100">
+        <div class="w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center mb-4">
+          <i data-lucide="user-check" class="w-6 h-6"></i>
+        </div>
+        <h2 class="text-xl font-extrabold text-slate-900 mb-1">Shifokor shaxsiy kabineti</h2>
+        <p class="text-xs text-slate-500 mb-5">Faqat shifokor o'z login va PIN-kodi bilan kirib, xonasidagi bemorlarni chaqiradi</p>
+
+        <form onsubmit="handleDoctorOnlyLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Shifokor Logini</label>
+            <input id="doc-login-input" type="text" placeholder="Masalan: kardiolog" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">PIN-kod (Parol)</label>
+            <input id="doc-pin-input" type="password" placeholder="••••" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <p id="doc-auth-error" class="text-xs font-bold text-rose-600 hidden"></p>
+          <button type="submit" class="w-full py-3.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-lg shadow-teal-600/20">
+            Xona kabinetiga kirish
+          </button>
+        </form>
+
+        <div class="mt-6 pt-5 border-t border-slate-100">
+          <p class="text-[11px] font-bold uppercase text-slate-400 mb-2.5">Shifokor parollari (Bosing):</p>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="quickFillDoc('kardiolog', '2040')" class="p-2.5 text-left rounded-xl bg-slate-50 hover:bg-teal-50 border border-slate-200 text-xs">
+              <div class="font-bold text-slate-800">👨‍⚕️ Dr. Azizbek</div>
+              <div class="text-[10px] text-teal-700 font-mono">kardiolog | PIN: 2040</div>
+            </button>
+            <button onclick="quickFillDoc('pediatr', '1080')" class="p-2.5 text-left rounded-xl bg-slate-50 hover:bg-teal-50 border border-slate-200 text-xs">
+              <div class="font-bold text-slate-800">👩‍⚕️ Dr. Dilnoza</div>
+              <div class="text-[10px] text-teal-700 font-mono">pediatr | PIN: 1080</div>
+            </button>
+            <button onclick="quickFillDoc('stomatolog', '1200')" class="p-2.5 text-left rounded-xl bg-slate-50 hover:bg-teal-50 border border-slate-200 text-xs">
+              <div class="font-bold text-slate-800">👨‍⚕️ Dr. Jamshid</div>
+              <div class="text-[10px] text-teal-700 font-mono">stomatolog | PIN: 1200</div>
+            </button>
+            <button onclick="quickFillDoc('nevro', '3050')" class="p-2.5 text-left rounded-xl bg-slate-50 hover:bg-teal-50 border border-slate-200 text-xs">
+              <div class="font-bold text-slate-800">👩‍⚕️ Dr. Malika</div>
+              <div class="text-[10px] text-teal-700 font-mono">nevro | PIN: 3050</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div id="doctor-dashboard-box" class="hidden bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-teal-100">
+        <div class="flex flex-wrap items-center justify-between gap-4 pb-6 border-b border-slate-100">
+          <div>
+            <span class="text-xs font-bold uppercase px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200">👨‍⚕️ SHIFOKOR KABINETI</span>
+            <h2 id="dash-doc-name" class="text-2xl font-extrabold text-slate-900 mt-1.5"></h2>
+            <p id="dash-doc-info" class="text-xs sm:text-sm text-slate-500"></p>
+          </div>
+          <button onclick="logoutDoctor()" class="px-4 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs border border-rose-200">
+            Kabinetdan chiqish
+          </button>
+        </div>
+        <div id="dash-doc-queue" class="mt-6"></div>
+      </div>
+    </div>
+
+    <!-- 5-BO'LIM: 👑 ADMIN PANEL -->
+    <div id="tab-admin" class="tab-section hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div id="admin-login-box" class="max-w-md mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-amber-200">
+        <div class="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mb-4">
+          <i data-lucide="shield-check" class="w-6 h-6"></i>
+        </div>
+        <h2 class="text-xl font-extrabold text-slate-900 mb-1">Admin va Registratura Paneli</h2>
+        <p class="text-xs text-slate-500 mb-5">Shifoxona boshqaruvi, yangi shifokor qo'shish, jonli talon kesish va barcha xonalarni nazorat qilish</p>
+
+        <form onsubmit="handleAdminLogin(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Admin Logini</label>
+            <input id="admin-login-input" type="text" placeholder="admin" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Maxfiy Parol (PIN)</label>
+            <input id="admin-pin-input" type="password" placeholder="••••" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+          </div>
+          <p id="admin-auth-error" class="text-xs font-bold text-rose-600 hidden"></p>
+          <button type="submit" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-sm shadow-lg">
+            Admin panelga kirish
+          </button>
+        </form>
+
+        <div class="mt-6 pt-5 border-t border-slate-100">
+          <p class="text-[11px] font-bold uppercase text-slate-400 mb-2">Admin kirish ma'lumotlari (Bosing):</p>
+          <button onclick="quickFillAdmin('admin', '7777')" class="w-full p-3 text-left rounded-xl bg-amber-50/80 hover:bg-amber-100 border border-amber-200 text-xs flex items-center justify-between transition-all">
+            <div>
+              <div class="font-extrabold text-slate-900">👑 Bosh Admin / Registrator</div>
+              <div class="text-[11px] text-slate-600">To'liq boshqaruv huquqi</div>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-white text-teal-800 font-mono font-bold text-xs border border-amber-300">admin | 7777</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="admin-dashboard-box" class="hidden space-y-6">
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <span class="text-xs font-extrabold uppercase px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">👑 BOSH ADMIN VA REGISTRATURA PANELI</span>
+            <h2 class="text-2xl font-extrabold text-slate-900 mt-2">Markazlashgan Klinik Boshqaruv Tizimi</h2>
+            <p class="text-xs sm:text-sm text-slate-500">12 ta viloyat shifokorlari, xonalar navbati va registratura talonlari</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5">
+            <button onclick="openWalkInModal()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm shadow-md">
+              + Registraturadan talon berish
+            </button>
+            <button onclick="openAddDoctorModal()" class="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm shadow-md">
+              + Yangi shifokor qo'shish
+            </button>
+            <button onclick="logoutAdmin()" class="px-4 py-2.5 rounded-xl bg-rose-50 text-rose-700 hover:bg-rose-100 font-bold text-xs sm:text-sm border border-rose-200">
+              Chiqish
+            </button>
+          </div>
+        </div>
+
+        <div id="admin-stats-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
+          <h3 class="text-lg font-extrabold text-slate-900 mb-1">1. Shifokor xonalari va TV Tablo boshqaruvi</h3>
+          <p class="text-xs text-slate-500 mb-4">Har bir xonadagi navbatni chaqirish yoki shifokorni bazadan o'chirish</p>
+          <div id="admin-rooms-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
+          <h3 class="text-lg font-extrabold text-slate-900 mb-1">2. Barcha bemorlar talonlari ro'yxati (Registratura nazorati)</h3>
+          <p class="text-xs text-slate-500 mb-4">Kelmagan bemor talonini bekor qilib soatni bo'shatish yoki qabulga kiritish</p>
+          <div id="admin-all-tickets" class="space-y-2.5"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL 1: YANGI SHIFOKOR QO'SHISH -->
+    <div id="add-doctor-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs items-center justify-center p-4 overflow-y-auto">
+      <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-teal-100 animate-fade-in">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-extrabold text-slate-900">Bazaga yangi shifokor qo'shish</h3>
+          <button onclick="closeAddDoctorModal()" class="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">✕</button>
+        </div>
+        <form onsubmit="submitNewDoctor(event)" class="space-y-3">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Shifokor F.I.Sh</label>
+            <input id="new-doc-name" type="text" required placeholder="Dr. Jahongir Alimov" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Mutaxassisligi</label>
+              <select id="new-doc-spec" class="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+                <option value="Kardiolog">Kardiolog</option>
+                <option value="Pediatr">Pediatr</option>
+                <option value="Stomatolog">Stomatolog</option>
+                <option value="Nevropatolog">Nevropatolog</option>
+                <option value="Terapevt">Terapevt</option>
+                <option value="Okulist">Okulist</option>
+                <option value="LOR">LOR</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Xona raqami</label>
+              <input id="new-doc-room" type="text" required value="205-xona" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Viloyat (12 ta)</label>
+            <select id="new-doc-region" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm">
+              <option value="Toshkent viloyati">Toshkent viloyati</option>
+              <option value="Samarqand viloyati">Samarqand viloyati</option>
+              <option value="Farg'ona viloyati">Farg'ona viloyati</option>
+              <option value="Andijon viloyati">Andijon viloyati</option>
+              <option value="Namangan viloyati">Namangan viloyati</option>
+              <option value="Buxoro viloyati">Buxoro viloyati</option>
+              <option value="Qashqadaryo viloyati">Qashqadaryo viloyati</option>
+              <option value="Surxondaryo viloyati">Surxondaryo viloyati</option>
+              <option value="Xorazm viloyati">Xorazm viloyati</option>
+              <option value="Navoiy viloyati">Navoiy viloyati</option>
+              <option value="Jizzax viloyati">Jizzax viloyati</option>
+              <option value="Sirdaryo viloyati">Sirdaryo viloyati</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Shifoxona nomi</label>
+            <input id="new-doc-clinic" type="text" required placeholder="Markaziy Poliklinika" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Shifokor Logini</label>
+              <input id="new-doc-login" type="text" required placeholder="doc_login" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">PIN-kodi (Parol)</label>
+              <input id="new-doc-pin" type="text" required value="1234" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+            </div>
+          </div>
+          <div class="pt-2 flex gap-2">
+            <button type="button" onclick="closeAddDoctorModal()" class="w-1/3 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs">Bekor qilish</button>
+            <button type="submit" class="w-2/3 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-lg">Saqlash va Qo'shish</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MODAL 2: REGISTRATURADAN TEZKOR TALON BERISH -->
+    <div id="walkin-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs items-center justify-center p-4">
+      <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-teal-100 animate-fade-in">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-extrabold text-slate-900">Registraturadan talon chiqarish</h3>
+          <button onclick="closeWalkInModal()" class="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">✕</button>
+        </div>
+        <form onsubmit="submitWalkInTicket(event)" class="space-y-3.5">
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Shifokorni tanlang</label>
+            <select id="walkin-doc-select" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm"></select>
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Bemor F.I.Sh</label>
+            <input id="walkin-patient-name" type="text" required placeholder="Bemor ism-familiyasi" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Telefon raqami</label>
+            <input id="walkin-patient-phone" type="tel" required value="+998 " oninput="formatPhone(this)" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+          </div>
+          <div class="pt-2 flex gap-2">
+            <button type="button" onclick="closeWalkInModal()" class="w-1/3 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs">Yopish</button>
+            <button type="submit" class="w-2/3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg">Talon chiqarish</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- QABULGA YOZILISH MODAL OYNASI -->
+  <div id="booking-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-teal-100 animate-fade-in">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <span class="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-700 border border-teal-200">Onlayn Qabul</span>
+          <h3 id="modal-doc-name" class="text-xl font-extrabold text-slate-900 mt-1"></h3>
+          <p id="modal-doc-clinic" class="text-xs text-slate-500"></p>
+        </div>
+        <button onclick="closeBookingModal()" class="p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200">✕</button>
+      </div>
+
+      <form onsubmit="submitBooking(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-2">1. Bo'sh vaqtni tanlang (Bugun)</label>
+          <div id="modal-slots-grid" class="grid grid-cols-4 gap-2"></div>
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">2. Bemor ism-sharifi</label>
+          <input id="patient-name-input" type="text" required placeholder="Ism va familiyangizni kiriting" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">3. Telefon raqamingiz</label>
+          <input id="patient-phone-input" type="tel" required value="+998 " oninput="formatPhone(this)" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        </div>
+        <p id="booking-error" class="text-xs font-bold text-rose-600 hidden"></p>
+        <div class="flex items-center gap-3 pt-2">
+          <button type="button" onclick="closeBookingModal()" class="w-1/3 py-3 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs sm:text-sm">Bekor qilish</button>
+          <button type="submit" class="w-2/3 py-3 rounded-xl bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-bold text-xs sm:text-sm shadow-lg">Tasdiqlash va Talon olish</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- TELEFON UCHUN PASTKI MENYU -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-teal-100 px-1 py-1.5 grid grid-cols-5 gap-0.5 shadow-lg">
+    <button onclick="switchTab('home')" class="flex flex-col items-center py-1 text-teal-700 font-bold text-[10px]">
+      <i data-lucide="calendar" class="w-4 h-4 mb-0.5"></i><span>Yozilish</span>
+    </button>
+    <button onclick="switchTab('tablo')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
+      <i data-lucide="tv" class="w-4 h-4 mb-0.5 text-emerald-600"></i><span>Tablo</span>
+    </button>
+    <button onclick="switchTab('tickets')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
+      <i data-lucide="qr-code" class="w-4 h-4 mb-0.5"></i><span>Talonim</span>
+    </button>
+    <button onclick="switchTab('doctor')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
+      <i data-lucide="user-check" class="w-4 h-4 mb-0.5 text-teal-600"></i><span>Shifokor</span>
+    </button>
+    <button onclick="switchTab('admin')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
+      <i data-lucide="shield-check" class="w-4 h-4 mb-0.5 text-amber-600"></i><span>Admin</span>
+    </button>
+  </nav>
+
+  <script src="script.js"></script>
+</body>
+</html>
