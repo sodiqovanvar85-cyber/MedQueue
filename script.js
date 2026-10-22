@@ -52,43 +52,132 @@ const DEFAULT_QUEUE = [
 const DB_KEYS = {
   DOCTORS: 'doctime_db_doctors_v1',
   QUEUE: 'doctime_db_queue_v1',
-  MY_TICKETS: 'doctime_db_mytickets_v1'
+  MY_TICKETS: 'doctime_db_mytickets_v1',
+  ADMIN: 'doctime_db_admin_v1'
 };
 
-let doctors = JSON.parse(localStorage.getItem(DB_KEYS.DOCTORS)) || DEFAULT_DOCTORS;
-let queue = JSON.parse(localStorage.getItem(DB_KEYS.QUEUE)) || DEFAULT_QUEUE;
-let myTicketIds = JSON.parse(localStorage.getItem(DB_KEYS.MY_TICKETS)) || [102];
+const ACTIVE = ['waiting', 'in_progress'];
+const STATUS = {
+  waiting: { label: 'Kutmoqda', cls: 'bg-amber-100 text-amber-800' },
+  in_progress: { label: 'Xonada', cls: 'bg-emerald-600 text-white' },
+  completed: { label: 'Yakunlangan', cls: 'bg-slate-200 text-slate-700' },
+  noshow: { label: 'Kelmadi', cls: 'bg-orange-100 text-orange-700' },
+  cancelled: { label: 'Bekor qilingan', cls: 'bg-rose-100 text-rose-700' }
+};
 
-function saveDatabase() {
-  localStorage.setItem(DB_KEYS.DOCTORS, JSON.stringify(doctors));
-  localStorage.setItem(DB_KEYS.QUEUE, JSON.stringify(queue));
-  localStorage.setItem(DB_KEYS.MY_TICKETS, JSON.stringify(myTicketIds));
-  const badge = document.getElementById('my-ticket-badge');
-  if (badge) badge.textContent = myTicketIds.length;
+/* ---------- Yordamchi funksiyalar ---------- */
+const clone = o => JSON.parse(JSON.stringify(o));
+const $ = id => document.getElementById(id);
+const val = id => ($(id) ? $(id).value : '');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sortByTime = (a, b) => String(a.time).localeCompare(String(b.time));
+const isValidPhone = p => /^\+998 \d{2} \d{3} \d{2} \d{2}$/.test(p);
+const freeSlotsOf = doc => ALL_TIME_SLOTS.filter(s => !doc.bookedSlots.includes(s));
+
+function loadJSON(key, fallback) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key));
+    if (v !== null && typeof v === typeof fallback && Array.isArray(v) === Array.isArray(fallback)) return v;
+  } catch (e) { /* buzilgan ma'lumot — boshlang'ich holatga qaytamiz */ }
+  return clone(fallback);
 }
 
-function resetDatabase() {
-  if (!confirm("Barcha ma'lumotlarni boshlang'ich holatiga qaytarishni xohlaysizmi?")) return;
-  localStorage.removeItem(DB_KEYS.DOCTORS);
-  localStorage.removeItem(DB_KEYS.QUEUE);
-  localStorage.removeItem(DB_KEYS.MY_TICKETS);
-  doctors = JSON.parse(JSON.stringify(DEFAULT_DOCTORS));
-  queue = JSON.parse(JSON.stringify(DEFAULT_QUEUE));
-  myTicketIds = [102];
-  saveDatabase();
-  renderDoctors();
-  renderAdminPanel();
-  renderTablo();
-  renderMyTickets();
-  showToast("🔄 Baza boshlang'ich holatiga qaytarildi!");
-}
+let doctors = loadJSON(DB_KEYS.DOCTORS, DEFAULT_DOCTORS);
+let queue = loadJSON(DB_KEYS.QUEUE, DEFAULT_QUEUE);
+let myTicketIds = loadJSON(DB_KEYS.MY_TICKETS, [102]);
+let adminCreds = loadJSON(DB_KEYS.ADMIN, { login: 'admin', pin: '7777' });
 
 let selectedSpecialty = 'all';
 let activeBookingDocId = null;
 let selectedSlotTime = '';
-let loggedInDoctor = null;
-let isAdminLoggedIn = false;
+let loggedInDoctorId = Number(sessionStorage.getItem('doctime_doc_session')) || null;
+let isAdminLoggedIn = sessionStorage.getItem('doctime_admin_session') === '1';
 
+function saveDatabase() {
+  const ids = new Set(queue.map(q => q.id));
+  myTicketIds = myTicketIds.filter(id => ids.has(id));
+  try {
+    localStorage.setItem(DB_KEYS.DOCTORS, JSON.stringify(doctors));
+    localStorage.setItem(DB_KEYS.QUEUE, JSON.stringify(queue));
+    localStorage.setItem(DB_KEYS.MY_TICKETS, JSON.stringify(myTicketIds));
+    localStorage.setItem(DB_KEYS.ADMIN, JSON.stringify(adminCreds));
+  } catch (e) {
+    showToast("⚠️ Ma'lumotni saqlab bo'lmadi (brauzer xotirasi bloklangan yoki to'lgan)");
+  }
+  updateBadge();
+}
+
+function updateBadge() {
+  const b = $('my-ticket-badge');
+  if (b) b.textContent = queue.filter(q => myTicketIds.includes(q.id) && ACTIVE.includes(q.status)).length;
+}
+
+function refreshAll() {
+  saveDatabase();
+  renderDoctors();
+  renderTablo();
+  renderMyTickets();
+  renderDoctorPanel();
+  renderAdminPanel();
+}
+
+function reloadFromStorage() {
+  doctors = loadJSON(DB_KEYS.DOCTORS, DEFAULT_DOCTORS);
+  queue = loadJSON(DB_KEYS.QUEUE, DEFAULT_QUEUE);
+  myTicketIds = loadJSON(DB_KEYS.MY_TICKETS, [102]);
+  adminCreds = loadJSON(DB_KEYS.ADMIN, { login: 'admin', pin: '7777' });
+  updateBadge();
+  renderDoctors(); renderTablo(); renderMyTickets(); renderDoctorPanel(); renderAdminPanel();
+}
+
+function resetDatabase() {
+  if (!confirm("Barcha ma'lumotlarni (shifokorlar, talonlar) boshlang'ich holatiga qaytarishni xohlaysizmi?")) return;
+  doctors = clone(DEFAULT_DOCTORS);
+  queue = clone(DEFAULT_QUEUE);
+  myTicketIds = [102];
+  loggedInDoctorId = null;
+  sessionStorage.removeItem('doctime_doc_session');
+  refreshAll();
+  showToast("🔄 Baza boshlang'ich holatiga qaytarildi!");
+}
+
+/* ---------- Toast, modal, xatolik ---------- */
+let toastTimer;
+function showToast(msg) {
+  const toast = $('toast');
+  $('toast-msg').textContent = msg;
+  toast.classList.remove('hidden');
+  toast.classList.add('flex');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.add('hidden');
+    toast.classList.remove('flex');
+  }, 3800);
+}
+
+function openModal(id) { const m = $(id); m.classList.remove('hidden'); m.classList.add('flex'); }
+function closeModal(id) { const m = $(id); m.classList.add('hidden'); m.classList.remove('flex'); }
+function showError(id, msg) { const e = $(id); e.textContent = msg; e.classList.remove('hidden'); }
+function hideError(id) { const e = $(id); if (e) e.classList.add('hidden'); }
+
+const attempts = {};
+function lockSeconds(k) { const a = attempts[k]; return a && a.until > Date.now() ? Math.ceil((a.until - Date.now()) / 1000) : 0; }
+function failAttempt(k) {
+  const a = attempts[k] || (attempts[k] = { n: 0, until: 0 });
+  if (++a.n >= 5) { a.until = Date.now() + 30000; a.n = 0; }
+}
+
+function speak(text) {
+  if (!('speechSynthesis' in window)) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  const v = voices.find(x => x.lang.toLowerCase().startsWith('uz')) || voices.find(x => x.lang.toLowerCase().startsWith('ru'));
+  if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'ru-RU'; }
+  window.speechSynthesis.speak(u);
+}
+
+/* ---------- Ishga tushirish ---------- */
 window.addEventListener('DOMContentLoaded', () => {
   saveDatabase();
   initRegions();
@@ -96,84 +185,90 @@ window.addEventListener('DOMContentLoaded', () => {
   renderDoctors();
   renderTablo();
   renderMyTickets();
+  renderDoctorPanel();
   updateClock();
   setInterval(updateClock, 1000);
-  lucide.createIcons();
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+});
+
+window.addEventListener('storage', e => {
+  if (Object.values(DB_KEYS).includes(e.key)) reloadFromStorage();
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') ['booking-modal', 'doctor-form-modal', 'walkin-modal', 'password-modal'].forEach(closeModal);
 });
 
 function updateClock() {
-  const now = new Date();
-  document.getElementById('live-clock').textContent = now.toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
-}
-
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  document.getElementById('toast-msg').textContent = msg;
-  toast.classList.remove('hidden');
-  toast.classList.add('flex');
-  setTimeout(() => {
-    toast.classList.add('hidden');
-    toast.classList.remove('flex');
-  }, 3800);
+  const el = $('live-clock');
+  if (el) el.textContent = new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' });
 }
 
 function switchTab(tabName) {
+  const tab = $(`tab-${tabName}`);
+  if (!tab) return;
   document.querySelectorAll('.tab-section').forEach(el => el.classList.add('hidden'));
-  document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+  tab.classList.remove('hidden');
 
   document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active-nav'));
-  const activeBtn = document.getElementById(`nav-${tabName}`);
+  const activeBtn = $(`nav-${tabName}`);
   if (activeBtn) activeBtn.classList.add('active-nav');
+
+  document.querySelectorAll('.mnav-btn').forEach(b => {
+    const on = b.dataset.tab === tabName;
+    b.classList.toggle('text-teal-700', on);
+    b.classList.toggle('font-bold', on);
+    b.classList.toggle('text-slate-600', !on);
+    b.classList.toggle('font-semibold', !on);
+  });
 
   if (tabName === 'tablo') renderTablo();
   if (tabName === 'tickets') renderMyTickets();
   if (tabName === 'doctor') renderDoctorPanel();
   if (tabName === 'admin') renderAdminPanel();
-  lucide.createIcons();
+  window.scrollTo({ top: 0 });
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+/* ---------- Hudud tanlash ---------- */
+function fillSelect(sel, items, firstLabel) {
+  sel.innerHTML = (firstLabel !== undefined ? `<option value="">${esc(firstLabel)}</option>` : '') +
+    items.map(i => `<option value="${esc(i)}">${esc(i)}</option>`).join('');
 }
 
 function initRegions() {
-  const regSelect = document.getElementById('region-select');
-  Object.keys(REGIONS_DATA).forEach(region => {
-    const opt = document.createElement('option');
-    opt.value = region;
-    opt.textContent = region;
-    regSelect.appendChild(opt);
-  });
+  const regions = Object.keys(REGIONS_DATA);
+  fillSelect($('region-select'), regions, 'Barcha viloyatlar (12 ta)');
+  fillSelect($('admin-doc-region'), regions, 'Barcha viloyatlar');
+  fillSelect($('doc-form-region'), regions);
+  fillSelect($('doc-form-spec'), SPECIALTIES.filter(s => s.id !== 'all').map(s => s.id));
+  fillFormDistricts();
 }
 
 function handleRegionChange() {
-  const reg = document.getElementById('region-select').value;
-  const distSelect = document.getElementById('district-select');
-  distSelect.innerHTML = '';
-
+  const reg = val('region-select');
+  const distSelect = $('district-select');
   if (!reg) {
     distSelect.disabled = true;
     distSelect.innerHTML = '<option value="">Avval viloyatni tanlang</option>';
   } else {
     distSelect.disabled = false;
-    distSelect.innerHTML = '<option value="">Barcha tuman va shaharlar</option>';
-    REGIONS_DATA[reg].forEach(d => {
-      const opt = document.createElement('option');
-      opt.value = d;
-      opt.textContent = d;
-      distSelect.appendChild(opt);
-    });
+    fillSelect(distSelect, REGIONS_DATA[reg], 'Barcha tuman va shaharlar');
   }
   renderDoctors();
 }
 
+function fillFormDistricts(selected) {
+  const reg = val('doc-form-region');
+  fillSelect($('doc-form-district'), REGIONS_DATA[reg] || []);
+  if (selected) $('doc-form-district').value = selected;
+}
+
 function renderSpecialtyPills() {
-  const container = document.getElementById('specialty-pills');
-  container.innerHTML = SPECIALTIES.map(s => `
+  $('specialty-pills').innerHTML = SPECIALTIES.map(s => `
     <button onclick="selectSpecialty('${s.id}')" class="px-3.5 py-2 rounded-2xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 border ${
-      selectedSpecialty === s.id
-        ? 'bg-teal-600 text-white border-teal-600 shadow-md'
-        : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-teal-300'
-    }">
-      <span>${s.icon}</span>
-      <span>${s.name}</span>
-    </button>
+      selectedSpecialty === s.id ? 'bg-teal-600 text-white border-teal-600 shadow-md' : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-teal-300'
+    }"><span>${s.icon}</span><span>${esc(s.name)}</span></button>
   `).join('');
 }
 
@@ -183,123 +278,136 @@ function selectSpecialty(id) {
   renderDoctors();
 }
 
+/* ---------- Shifokorlar ro'yxati ---------- */
 function renderDoctors() {
-  const reg = document.getElementById('region-select').value;
-  const dist = document.getElementById('district-select').value;
-  const query = document.getElementById('search-input').value.toLowerCase();
+  const reg = val('region-select');
+  const dist = val('district-select');
+  const query = val('search-input').trim().toLowerCase();
 
-  const filtered = doctors.filter(d => {
-    const matchReg = !reg || d.region === reg;
-    const matchDist = !dist || d.district === dist;
-    const matchSpec = selectedSpecialty === 'all' || d.specialty === selectedSpecialty;
-    const matchQ = !query || d.name.toLowerCase().includes(query) || d.clinic.toLowerCase().includes(query) || d.region.toLowerCase().includes(query);
-    return matchReg && matchDist && matchSpec && matchQ;
-  });
+  const filtered = doctors.filter(d =>
+    (!reg || d.region === reg) &&
+    (!dist || d.district === dist) &&
+    (selectedSpecialty === 'all' || d.specialty === selectedSpecialty) &&
+    (!query || d.name.toLowerCase().includes(query) || d.clinic.toLowerCase().includes(query) || d.region.toLowerCase().includes(query))
+  );
 
-  document.getElementById('found-count').textContent = `${filtered.length} ta shifokor`;
-  const grid = document.getElementById('doctors-grid');
+  $('found-count').textContent = `${filtered.length} ta shifokor`;
 
-  grid.innerHTML = filtered.map(doc => {
-    const freeSlots = ALL_TIME_SLOTS.filter(s => !doc.bookedSlots.includes(s));
+  if (filtered.length === 0) {
+    $('doctors-grid').innerHTML = '<p class="col-span-full text-center text-sm text-slate-500 py-10">Hech narsa topilmadi. Filtrlarni o\'zgartirib ko\'ring.</p>';
+    return;
+  }
+
+  $('doctors-grid').innerHTML = filtered.map(doc => {
+    const free = freeSlotsOf(doc);
     const slotsHtml = ALL_TIME_SLOTS.map(slot => {
-      const isBooked = doc.bookedSlots.includes(slot);
-      return `
-        <button ${isBooked ? 'disabled' : `onclick="openBookingModal(${doc.id}, '${slot}')"`}
-          class="py-1.5 px-1 rounded-lg text-[11px] font-bold border transition-all ${
-            isBooked
-              ? 'bg-slate-100 text-slate-400 border-slate-200 line-through cursor-not-allowed'
-              : 'bg-white text-emerald-700 border-emerald-300 hover:bg-teal-600 hover:text-white'
-          }">
-          ${slot}
-        </button>
-      `;
+      const booked = doc.bookedSlots.includes(slot);
+      return `<button ${booked ? 'disabled' : `onclick="openBookingModal(${doc.id}, '${slot}')"`}
+        class="py-1.5 px-1 rounded-lg text-[11px] font-bold border transition-all ${booked
+          ? 'bg-slate-100 text-slate-400 border-slate-200 line-through cursor-not-allowed'
+          : 'bg-white text-emerald-700 border-emerald-300 hover:bg-teal-600 hover:text-white'}">${slot}</button>`;
     }).join('');
 
     return `
       <div class="bg-white rounded-3xl p-5 border border-teal-100 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between">
         <div>
           <div class="flex items-start gap-3.5 mb-3.5">
-            <img src="${doc.avatar}" alt="${doc.name}" class="w-14 h-14 rounded-2xl object-cover border-2 border-teal-100 shrink-0" />
+            <img src="${esc(doc.avatar)}" alt="${esc(doc.name)}" loading="lazy" class="w-14 h-14 rounded-2xl object-cover border-2 border-teal-100 shrink-0" />
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1 mb-1">
-                <span class="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">${doc.specialty}</span>
-                <span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-700">${doc.clinicType}</span>
+                <span class="px-2.5 py-0.5 rounded-lg text-[11px] font-bold bg-teal-50 text-teal-700 border border-teal-200">${esc(doc.specialty)}</span>
+                <span class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-700">${esc(doc.clinicType)}</span>
               </div>
-              <h3 class="text-base font-extrabold text-slate-900 truncate">${doc.name}</h3>
-              <p class="text-xs text-slate-500">⭐ ${doc.rating} • Tajriba: ${doc.experience}</p>
+              <h3 class="text-base font-extrabold text-slate-900 truncate">${esc(doc.name)}</h3>
+              <p class="text-xs text-slate-500">⭐ ${esc(doc.rating)} • Tajriba: ${esc(doc.experience)}</p>
             </div>
           </div>
-
           <div class="space-y-1 text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100 mb-3.5">
-            <div class="font-semibold text-slate-800 truncate">🏥 ${doc.clinic} (${doc.room})</div>
-            <div class="truncate">📍 ${doc.region}, ${doc.district}</div>
-            <div class="font-bold text-teal-700 pt-1">💳 ${doc.price}</div>
+            <div class="font-semibold text-slate-800 truncate">🏥 ${esc(doc.clinic)} (${esc(doc.room)})</div>
+            <div class="truncate">📍 ${esc(doc.region)}, ${esc(doc.district)}</div>
+            <div class="font-bold text-teal-700 pt-1">💳 ${esc(doc.price)}</div>
           </div>
-
           <div class="mb-4 bg-teal-50/50 border border-teal-100 rounded-2xl p-3">
             <div class="flex items-center justify-between mb-2">
               <span class="text-[11px] font-extrabold uppercase text-slate-700">Bugungi bo'sh vaqtlar:</span>
-              <span class="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">${freeSlots.length} ta bo'sh</span>
+              <span class="text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">${free.length} ta bo'sh</span>
             </div>
             <div class="grid grid-cols-4 gap-1.5">${slotsHtml}</div>
           </div>
         </div>
-
-        <button onclick="openBookingModal(${doc.id}, '${freeSlots[0] || ''}')" class="w-full py-3 px-4 rounded-2xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm shadow-md transition-all">
-          Vaqt tanlash va yozilish
+        <button ${free.length ? `onclick="openBookingModal(${doc.id}, '${free[0]}')"` : 'disabled'}
+          class="w-full py-3 px-4 rounded-2xl font-bold text-xs sm:text-sm shadow-md transition-all ${free.length ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-slate-200 text-slate-500 cursor-not-allowed shadow-none'}">
+          ${free.length ? 'Vaqt tanlash va yozilish' : "Bugun bo'sh vaqt qolmagan"}
         </button>
-      </div>
-    `;
+      </div>`;
   }).join('');
 }
 
+/* ---------- Talon yaratish ---------- */
+function nextTicketNo(prefix) {
+  let max = 0;
+  queue.forEach(q => {
+    const m = String(q.ticketNo).match(/^([A-Z]+)-(\d+)/);
+    if (m && m[1] === prefix) max = Math.max(max, Number(m[2]));
+  });
+  return `${prefix}-${String(max + 1).padStart(3, '0')}`;
+}
+
+function hasActiveTicket(docId, phone) {
+  return queue.some(q => q.doctorId === docId && q.phone === phone && ACTIVE.includes(q.status));
+}
+
+function createTicket(doc, name, phone, time) {
+  if (ALL_TIME_SLOTS.includes(time)) doc.bookedSlots.push(time);
+  const t = {
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    ticketNo: nextTicketNo(doc.prefix),
+    patientName: name, phone,
+    doctorId: doc.id, doctorName: doc.name, specialty: doc.specialty,
+    clinic: doc.clinic, room: doc.room, time, status: 'waiting'
+  };
+  queue.push(t);
+  return t;
+}
+
+function freeSlot(t) {
+  const doc = doctors.find(d => d.id === t.doctorId);
+  if (doc) doc.bookedSlots = doc.bookedSlots.filter(s => s !== t.time);
+}
+
+/* ---------- Onlayn yozilish ---------- */
 function openBookingModal(docId, defaultSlot) {
-  activeBookingDocId = docId;
   const doc = doctors.find(d => d.id === docId);
-  const free = ALL_TIME_SLOTS.filter(s => !doc.bookedSlots.includes(s));
-  selectedSlotTime = defaultSlot || free[0] || '';
-
-  document.getElementById('modal-doc-name').textContent = `${doc.name} (${doc.specialty})`;
-  document.getElementById('modal-doc-clinic').textContent = `${doc.clinic} • ${doc.room}`;
-  document.getElementById('booking-error').classList.add('hidden');
-
+  if (!doc) return;
+  activeBookingDocId = docId;
+  const free = freeSlotsOf(doc);
+  selectedSlotTime = free.includes(defaultSlot) ? defaultSlot : (free[0] || '');
+  $('modal-doc-name').textContent = `${doc.name} (${doc.specialty})`;
+  $('modal-doc-clinic').textContent = `${doc.clinic} • ${doc.room}`;
+  hideError('booking-error');
   renderModalSlots();
-  const modal = document.getElementById('booking-modal');
-  modal.classList.remove('hidden');
-  modal.classList.add('flex');
+  openModal('booking-modal');
 }
 
 function renderModalSlots() {
   const doc = doctors.find(d => d.id === activeBookingDocId);
-  const container = document.getElementById('modal-slots-grid');
-
-  container.innerHTML = ALL_TIME_SLOTS.map(slot => {
-    const isBooked = doc.bookedSlots.includes(slot);
-    const isSelected = selectedSlotTime === slot;
-    return `
-      <button type="button" ${isBooked ? 'disabled' : `onclick="chooseSlot('${slot}')"`}
-        class="py-2 rounded-xl text-xs font-bold border transition-all ${
-          isBooked
-            ? 'bg-slate-100 text-slate-400 border-slate-200 line-through cursor-not-allowed'
-            : isSelected
-            ? 'bg-teal-600 text-white border-teal-600 shadow-md'
-            : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-        }">
-        ${slot} ${isBooked ? '(Band)' : isSelected ? '✓' : ''}
-      </button>
-    `;
+  if (!doc) return;
+  $('modal-slots-grid').innerHTML = ALL_TIME_SLOTS.map(slot => {
+    const booked = doc.bookedSlots.includes(slot);
+    const sel = selectedSlotTime === slot;
+    return `<button type="button" ${booked ? 'disabled' : `onclick="chooseSlot('${slot}')"`}
+      class="py-2 rounded-xl text-xs font-bold border transition-all ${booked
+        ? 'bg-slate-100 text-slate-400 border-slate-200 line-through cursor-not-allowed'
+        : sel ? 'bg-teal-600 text-white border-teal-600 shadow-md' : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'}">
+      ${slot} ${booked ? '(Band)' : sel ? '✓' : ''}</button>`;
   }).join('');
 }
 
-function chooseSlot(slot) {
-  selectedSlotTime = slot;
-  renderModalSlots();
-}
+function chooseSlot(slot) { selectedSlotTime = slot; renderModalSlots(); }
 
 function closeBookingModal() {
-  const modal = document.getElementById('booking-modal');
-  modal.classList.add('hidden');
-  modal.classList.remove('flex');
+  closeModal('booking-modal');
+  $('patient-phone-input').value = '+998 ';
 }
 
 function formatPhone(input) {
@@ -316,473 +424,567 @@ function formatPhone(input) {
 
 function submitBooking(e) {
   e.preventDefault();
-  const name = document.getElementById('patient-name-input').value.trim();
-  const phone = document.getElementById('patient-phone-input').value.trim();
-  const errEl = document.getElementById('booking-error');
-
-  if (!selectedSlotTime) {
-    errEl.textContent = "Iltimos, bo'sh soatlardan birini tanlang!";
-    errEl.classList.remove('hidden');
-    return;
-  }
-
+  const name = val('patient-name-input').trim();
+  const phone = val('patient-phone-input').trim();
   const doc = doctors.find(d => d.id === activeBookingDocId);
-  doc.bookedSlots.push(selectedSlotTime);
 
-  const ticketNo = `${doc.prefix}-0${Math.floor(15 + Math.random() * 80)}`;
-  const newTicket = {
-    id: Date.now(),
-    ticketNo,
-    patientName: name,
-    phone,
-    doctorId: doc.id,
-    doctorName: doc.name,
-    specialty: doc.specialty,
-    clinic: doc.clinic,
-    room: doc.room,
-    time: selectedSlotTime,
-    status: 'waiting'
-  };
+  if (!doc) return showError('booking-error', 'Shifokor topilmadi. Sahifani yangilang.');
+  if (!selectedSlotTime) return showError('booking-error', "Iltimos, bo'sh soatlardan birini tanlang!");
+  if (doc.bookedSlots.includes(selectedSlotTime)) {
+    selectedSlotTime = '';
+    renderModalSlots(); renderDoctors();
+    return showError('booking-error', "Bu vaqt hozirgina band bo'ldi. Boshqa soatni tanlang.");
+  }
+  if (name.length < 3) return showError('booking-error', "Ism-sharifni to'liq kiriting (kamida 3 harf).");
+  if (!isValidPhone(phone)) return showError('booking-error', "Telefon raqamini to'liq kiriting: +998 XX XXX XX XX");
+  if (hasActiveTicket(doc.id, phone)) return showError('booking-error', "Bu raqamga shu shifokorga faol talon allaqachon olingan.");
 
-  queue.push(newTicket);
-  myTicketIds.unshift(newTicket.id);
-  saveDatabase();
-
+  const t = createTicket(doc, name, phone, selectedSlotTime);
+  myTicketIds.unshift(t.id);
   closeBookingModal();
-  document.getElementById('patient-name-input').value = '';
-  renderDoctors();
-  showToast(`✅ Navbat olindi! Talon: ${ticketNo} (${selectedSlotTime})`);
+  $('patient-name-input').value = '';
+  refreshAll();
+  showToast(`✅ Navbat olindi! Talon: ${t.ticketNo} (${t.time})`);
   switchTab('tickets');
 }
 
+/* ---------- Jonli tablo ---------- */
 function renderTablo() {
   const inProg = queue.filter(q => q.status === 'in_progress');
-  const waiting = queue.filter(q => q.status === 'waiting');
+  const waiting = queue.filter(q => q.status === 'waiting').sort(sortByTime);
 
-  document.getElementById('tablo-inprogress').innerHTML = inProg.length === 0
+  $('tablo-inprogress').innerHTML = inProg.length === 0
     ? '<p class="text-slate-400 text-xs">Hozir xonalarda bemor yo\'q</p>'
-    : inProg.map(item => `
+    : inProg.map(i => `
       <div class="flex items-center justify-between bg-emerald-950/60 border border-emerald-500/40 p-4 rounded-2xl">
         <div>
-          <span class="text-2xl font-black text-emerald-400">${item.ticketNo}</span>
-          <p class="text-xs text-slate-300 mt-0.5">${item.patientName} • ${item.doctorName}</p>
+          <span class="text-2xl font-black text-emerald-400">${esc(i.ticketNo)}</span>
+          <p class="text-xs text-slate-300 mt-0.5">${esc(i.patientName)} • ${esc(i.doctorName)}</p>
         </div>
         <div class="text-right">
-          <span class="px-3 py-1 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-sm">${item.room}</span>
+          <span class="px-3 py-1 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-sm">${esc(i.room)}</span>
           <p class="text-[11px] text-emerald-300 mt-1">Kirishingiz mumkin</p>
         </div>
-      </div>
-    `).join('');
+      </div>`).join('');
 
-  document.getElementById('tablo-waiting').innerHTML = waiting.length === 0
+  $('tablo-waiting').innerHTML = waiting.length === 0
     ? '<p class="text-slate-400 text-xs">Kutayotgan bemorlar yo\'q</p>'
-    : waiting.map(item => `
+    : waiting.map(i => `
       <div class="flex items-center justify-between bg-slate-900/90 border border-slate-700 p-3.5 rounded-2xl">
         <div>
-          <span class="text-xl font-extrabold text-amber-400">${item.ticketNo}</span>
-          <p class="text-xs text-slate-400">${item.patientName} (Soat ${item.time})</p>
+          <span class="text-xl font-extrabold text-amber-400">${esc(i.ticketNo)}</span>
+          <p class="text-xs text-slate-400">${esc(i.patientName)} (Soat ${esc(i.time)})</p>
         </div>
-        <span class="text-xs font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-xl">${item.room}</span>
-      </div>
-    `).join('');
+        <span class="text-xs font-bold text-slate-300 bg-slate-800 px-3 py-1.5 rounded-xl">${esc(i.room)}</span>
+      </div>`).join('');
+}
+
+/* ---------- Mening talonim ---------- */
+function findTicket(e) {
+  e.preventDefault();
+  const code = val('ticket-code-input').trim().toUpperCase();
+  const phone = val('ticket-phone-input').trim();
+  const t = queue.find(q => q.ticketNo.toUpperCase() === code && q.phone === phone && ACTIVE.includes(q.status));
+  if (!t) return showToast("Talon topilmadi. Kod va telefon raqami bir xil bo'lishi kerak.");
+  if (!myTicketIds.includes(t.id)) myTicketIds.unshift(t.id);
+  $('ticket-code-input').value = '';
+  $('ticket-phone-input').value = '+998 ';
+  refreshAll();
+  showToast(`✅ ${t.ticketNo} talon qo'shildi`);
 }
 
 function renderMyTickets() {
-  const searchQ = (document.getElementById('ticket-search-input')?.value || '').trim().toLowerCase();
-  const myList = queue.filter(q => {
-    const isMine = myTicketIds.includes(q.id);
-    const matchSearch = searchQ.length > 1 && (
-      q.ticketNo.toLowerCase().includes(searchQ) ||
-      q.phone.toLowerCase().includes(searchQ) ||
-      q.patientName.toLowerCase().includes(searchQ)
-    );
-    return isMine || matchSearch;
-  });
-
-  const container = document.getElementById('my-tickets-list');
-  if (myList.length === 0) {
+  const list = queue.filter(q => myTicketIds.includes(q.id) && ACTIVE.includes(q.status)).sort(sortByTime);
+  const container = $('my-tickets-list');
+  if (!container) return;
+  if (list.length === 0) {
     container.innerHTML = `<p class="text-sm text-slate-500">Sizda hozircha faol talonlar yo'q.</p>`;
     return;
   }
-
-  container.innerHTML = myList.map(t => `
+  container.innerHTML = list.map(t => {
+    const ahead = t.status === 'waiting'
+      ? queue.filter(q => q.id !== t.id && q.doctorId === t.doctorId && ACTIVE.includes(q.status) && (q.status === 'in_progress' || q.time < t.time)).length
+      : 0;
+    const inProg = t.status === 'in_progress';
+    return `
     <div class="p-5 rounded-2xl bg-teal-50/60 border border-teal-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
       <div class="space-y-1">
-        <div class="flex items-center gap-2">
-          <span class="text-2xl font-black text-teal-700">${t.ticketNo}</span>
-          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">Soat ${t.time} da</span>
-          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${t.status === 'in_progress' ? 'bg-emerald-600 text-white' : 'bg-white text-teal-700 border border-teal-200'}">
-            ${t.status === 'in_progress' ? 'Xonaga kiring!' : 'Navbat kutmoqda'}
-          </span>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-2xl font-black text-teal-700">${esc(t.ticketNo)}</span>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">Soat ${esc(t.time)}</span>
+          <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${inProg ? 'bg-emerald-600 text-white' : 'bg-white text-teal-700 border border-teal-200'}">${inProg ? 'Xonaga kiring!' : 'Navbat kutmoqda'}</span>
         </div>
-        <p class="text-sm font-bold text-slate-900">${t.doctorName} (${t.specialty})</p>
-        <p class="text-xs text-slate-600">🏥 ${t.clinic} • <strong>${t.room}</strong></p>
-        <p class="text-xs text-slate-500">👤 Bemor: ${t.patientName} (${t.phone})</p>
+        <p class="text-sm font-bold text-slate-900">${esc(t.doctorName)} (${esc(t.specialty)})</p>
+        <p class="text-xs text-slate-600">🏥 ${esc(t.clinic)} • <strong>${esc(t.room)}</strong></p>
+        <p class="text-xs text-slate-500">👤 Bemor: ${esc(t.patientName)} (${esc(t.phone)})</p>
+        ${inProg ? '' : `<p class="text-xs font-semibold text-teal-700">⏳ O'zingizdan oldin: ${ahead} kishi</p>`}
       </div>
-      <button onclick="cancelTicket(${t.id})" class="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 self-start sm:self-center">
-        Navbatni bekor qilish
-      </button>
-    </div>
-  `).join('');
+      ${inProg ? '' : `<button onclick="cancelTicket(${t.id})" class="px-4 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 self-start sm:self-center">Navbatni bekor qilish</button>`}
+    </div>`;
+  }).join('');
 }
 
+/* ---------- Talon holatini o'zgartirish ---------- */
 function cancelTicket(id) {
-  const t = queue.find(item => item.id === id);
-  if (t) {
-    const doc = doctors.find(d => d.id === t.doctorId);
-    if (doc) doc.bookedSlots = doc.bookedSlots.filter(s => s !== t.time);
-  }
-  queue = queue.filter(item => item.id !== id);
-  myTicketIds = myTicketIds.filter(itemId => itemId !== id);
-  saveDatabase();
-
-  renderMyTickets();
-  renderDoctors();
-  renderAdminPanel();
-  renderDoctorPanel();
-  renderTablo();
+  const t = queue.find(q => q.id === id);
+  if (!t || t.status !== 'waiting') return;
+  if (!confirm(`${t.ticketNo} talonini bekor qilmoqchimisiz?`)) return;
+  freeSlot(t);
+  t.status = 'cancelled';
+  refreshAll();
   showToast("Talon bekor qilindi va shifokor vaqti bo'shatildi!");
 }
 
-function quickFillDoc(login, pin) {
-  document.getElementById('doc-login-input').value = login;
-  document.getElementById('doc-pin-input').value = pin;
-  document.getElementById('doc-auth-error').classList.add('hidden');
+function announce(t, doc) {
+  t.status = 'in_progress';
+  showToast(`📢 ${t.ticketNo} (${t.patientName}) — ${doc.room}ga chaqirildi!`);
+  speak(`Talon raqami ${t.ticketNo.replace('-', ' ')}. ${doc.room}ga kiring.`);
 }
 
+function completeCurrent(docId) {
+  queue.forEach(q => { if (q.doctorId === docId && q.status === 'in_progress') q.status = 'completed'; });
+}
+
+function callNextPatient(docId) {
+  const doc = doctors.find(d => d.id === docId);
+  if (!doc) return;
+  const next = queue.filter(q => q.doctorId === docId && q.status === 'waiting').sort(sortByTime)[0];
+  completeCurrent(docId);
+  if (next) announce(next, doc);
+  else showToast(`${doc.name} xonasida kutayotgan bemorlar qolmadi.`);
+  refreshAll();
+}
+
+function finishCurrent(docId) {
+  completeCurrent(docId);
+  refreshAll();
+  showToast('Qabul yakunlandi');
+}
+
+/* ---------- Shifokor paneli ---------- */
 function handleDoctorOnlyLogin(e) {
   e.preventDefault();
-  const login = document.getElementById('doc-login-input').value.trim().toLowerCase();
-  const pin = document.getElementById('doc-pin-input').value.trim();
-  const doc = doctors.find(d => d.login.toLowerCase() === login && d.pin === pin);
-
+  const lock = lockSeconds('doc');
+  if (lock) return showError('doc-auth-error', `Juda ko'p urinish. ${lock} soniyadan so'ng qayta urinib ko'ring.`);
+  const login = val('doc-login-input').trim().toLowerCase();
+  const pin = val('doc-pin-input').trim();
+  const doc = doctors.find(d => d.login.toLowerCase() === login && String(d.pin) === pin);
   if (!doc) {
-    const err = document.getElementById('doc-auth-error');
-    err.textContent = "Shifokor logini yoki PIN-kodi xato!";
-    err.classList.remove('hidden');
-    return;
+    failAttempt('doc');
+    return showError('doc-auth-error', 'Shifokor logini yoki PIN-kodi xato!');
   }
-
-  loggedInDoctor = doc;
-  document.getElementById('doc-auth-error').classList.add('hidden');
+  delete attempts.doc;
+  loggedInDoctorId = doc.id;
+  sessionStorage.setItem('doctime_doc_session', String(doc.id));
+  $('doc-login-input').value = '';
+  $('doc-pin-input').value = '';
+  hideError('doc-auth-error');
   renderDoctorPanel();
   showToast(`👨‍⚕️ Xush kelibsiz, ${doc.name}!`);
 }
 
 function logoutDoctor() {
-  loggedInDoctor = null;
+  loggedInDoctorId = null;
+  sessionStorage.removeItem('doctime_doc_session');
   renderDoctorPanel();
-  showToast("Shifokor kabinetidan chiqildi");
+  showToast('Shifokor kabinetidan chiqildi');
 }
 
 function renderDoctorPanel() {
-  const loginBox = document.getElementById('doctor-login-box');
-  const dashBox = document.getElementById('doctor-dashboard-box');
+  const loginBox = $('doctor-login-box');
+  const dashBox = $('doctor-dashboard-box');
   if (!loginBox || !dashBox) return;
+  const doc = loggedInDoctorId ? doctors.find(d => d.id === loggedInDoctorId) : null;
 
-  if (!loggedInDoctor) {
+  if (!doc) {
+    loggedInDoctorId = null;
+    sessionStorage.removeItem('doctime_doc_session');
     loginBox.classList.remove('hidden');
     dashBox.classList.add('hidden');
     return;
   }
-
   loginBox.classList.add('hidden');
   dashBox.classList.remove('hidden');
+  $('dash-doc-name').textContent = doc.name;
+  $('dash-doc-info').textContent = `${doc.specialty} • ${doc.clinic} (${doc.room})`;
 
-  document.getElementById('dash-doc-name').textContent = loggedInDoctor.name;
-  document.getElementById('dash-doc-info').textContent = `${loggedInDoctor.specialty} • ${loggedInDoctor.clinic} (${loggedInDoctor.room})`;
+  const docQueue = queue.filter(q => q.doctorId === doc.id && ACTIVE.includes(q.status))
+    .sort((a, b) => (a.status === 'in_progress' ? -1 : 0) - (b.status === 'in_progress' ? -1 : 0) || sortByTime(a, b));
+  const hasCurrent = docQueue.some(q => q.status === 'in_progress');
 
-  const docQueue = queue.filter(q => q.doctorId === loggedInDoctor.id && q.status !== 'completed');
-  const container = document.getElementById('dash-doc-queue');
-
-  container.innerHTML = `
+  $('dash-doc-queue').innerHTML = `
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
       <h3 class="text-base font-bold text-slate-800">Xonangiz navbati (${docQueue.length} nafar bemor)</h3>
-      <button onclick="callNextPatient(${loggedInDoctor.id})" class="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm shadow-lg">
-        📢 Keyingi bemorni chaqirish
-      </button>
+      <div class="flex flex-wrap gap-2">
+        ${hasCurrent ? `<button onclick="finishCurrent(${doc.id})" class="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 font-bold text-xs sm:text-sm">✔ Qabulni yakunlash</button>` : ''}
+        <button onclick="callNextPatient(${doc.id})" class="px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs sm:text-sm shadow-lg">📢 Keyingi bemorni chaqirish</button>
+      </div>
     </div>
     <div class="space-y-2.5">
-      ${docQueue.length === 0 ? '<p class="text-sm text-slate-500">Xonangizda kutayotgan bemorlar yo\'q.</p>' : docQueue.map(item => `
-        <div class="p-4 rounded-2xl border flex items-center justify-between ${item.status === 'in_progress' ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}">
-          <div>
-            <span class="text-lg font-black text-teal-800">${item.ticketNo}</span>
-            <span class="ml-2 text-sm font-bold text-slate-800">${item.patientName}</span>
-            <p class="text-xs text-slate-500">Soat: ${item.time} • Tel: ${item.phone}</p>
+      ${docQueue.length === 0 ? '<p class="text-sm text-slate-500">Xonangizda kutayotgan bemorlar yo\'q.</p>' : docQueue.map(i => `
+        <div class="p-4 rounded-2xl border flex items-center justify-between gap-3 ${i.status === 'in_progress' ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200'}">
+          <div class="min-w-0">
+            <span class="text-lg font-black text-teal-800">${esc(i.ticketNo)}</span>
+            <span class="ml-2 text-sm font-bold text-slate-800">${esc(i.patientName)}</span>
+            <p class="text-xs text-slate-500">Soat: ${esc(i.time)} • Tel: ${esc(i.phone)}</p>
           </div>
-          <span class="px-3 py-1 rounded-lg text-xs font-bold ${item.status === 'in_progress' ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-800'}">
-            ${item.status === 'in_progress' ? 'Xonada (Qabulda)' : 'Kutmoqda'}
-          </span>
-        </div>
-      `).join('')}
-    </div>
-  `;
+          <span class="px-3 py-1 rounded-lg text-xs font-bold shrink-0 ${STATUS[i.status].cls}">${i.status === 'in_progress' ? 'Xonada (Qabulda)' : 'Kutmoqda'}</span>
+        </div>`).join('')}
+    </div>`;
 }
 
-function quickFillAdmin(login, pin) {
-  document.getElementById('admin-login-input').value = login;
-  document.getElementById('admin-pin-input').value = pin;
-  document.getElementById('admin-auth-error').classList.add('hidden');
-}
-
+/* ================= ADMIN PANEL ================= */
 function handleAdminLogin(e) {
   e.preventDefault();
-  const login = document.getElementById('admin-login-input').value.trim().toLowerCase();
-  const pin = document.getElementById('admin-pin-input').value.trim();
-
-  if (login === 'admin' && pin === '7777') {
+  const lock = lockSeconds('admin');
+  if (lock) return showError('admin-auth-error', `Juda ko'p urinish. ${lock} soniyadan so'ng qayta urinib ko'ring.`);
+  const login = val('admin-login-input').trim().toLowerCase();
+  const pin = val('admin-pin-input').trim();
+  if (login === String(adminCreds.login).toLowerCase() && pin === String(adminCreds.pin)) {
+    delete attempts.admin;
     isAdminLoggedIn = true;
-    document.getElementById('admin-auth-error').classList.add('hidden');
+    sessionStorage.setItem('doctime_admin_session', '1');
+    $('admin-login-input').value = '';
+    $('admin-pin-input').value = '';
+    hideError('admin-auth-error');
     renderAdminPanel();
-    showToast("👑 Bosh Admin paneliga xush kelibsiz!");
+    showToast('👑 Bosh Admin paneliga xush kelibsiz!');
   } else {
-    const err = document.getElementById('admin-auth-error');
-    err.textContent = "Admin logini yoki paroli noto'g'ri! (admin / 7777)";
-    err.classList.remove('hidden');
+    failAttempt('admin');
+    showError('admin-auth-error', "Admin logini yoki paroli noto'g'ri!");
   }
 }
 
 function logoutAdmin() {
   isAdminLoggedIn = false;
+  sessionStorage.removeItem('doctime_admin_session');
   renderAdminPanel();
-  showToast("Admin paneldan chiqildi");
+  showToast('Admin paneldan chiqildi');
 }
 
 function renderAdminPanel() {
-  const loginBox = document.getElementById('admin-login-box');
-  const dashBox = document.getElementById('admin-dashboard-box');
+  const loginBox = $('admin-login-box');
+  const dashBox = $('admin-dashboard-box');
   if (!loginBox || !dashBox) return;
-
   if (!isAdminLoggedIn) {
     loginBox.classList.remove('hidden');
     dashBox.classList.add('hidden');
     return;
   }
-
   loginBox.classList.add('hidden');
   dashBox.classList.remove('hidden');
-
-  const waitingCount = queue.filter(q => q.status === 'waiting').length;
-  const inProgCount = queue.filter(q => q.status === 'in_progress').length;
-  const completedCount = queue.filter(q => q.status === 'completed').length;
-
-  document.getElementById('admin-stats-grid').innerHTML = `
-    <div class="p-5 rounded-2xl bg-white border border-teal-100 shadow-xs">
-      <div class="text-[11px] font-extrabold uppercase text-slate-400">Bazadagi Shifokorlar</div>
-      <div class="text-3xl font-black text-slate-900 mt-1">${doctors.length} ta</div>
-      <div class="text-xs text-teal-600 font-semibold mt-0.5">LocalStorage DB faol</div>
-    </div>
-    <div class="p-5 rounded-2xl bg-amber-50/80 border border-amber-200">
-      <div class="text-[11px] font-extrabold uppercase text-amber-700">Hozir kutmoqda</div>
-      <div class="text-3xl font-black text-slate-900 mt-1">${waitingCount}</div>
-      <div class="text-xs text-slate-500 mt-0.5">Koridordagi bemorlar</div>
-    </div>
-    <div class="p-5 rounded-2xl bg-emerald-50/80 border border-emerald-200">
-      <div class="text-[11px] font-extrabold uppercase text-emerald-700">Hozir qabulda</div>
-      <div class="text-3xl font-black text-emerald-700 mt-1">${inProgCount}</div>
-      <div class="text-xs text-slate-500 mt-0.5">Shifokor xonasida</div>
-    </div>
-    <div class="p-5 rounded-2xl bg-teal-50/80 border border-teal-200 flex flex-col justify-between">
-      <div>
-        <div class="text-[11px] font-extrabold uppercase text-teal-700">Yakunlangan: ${completedCount} ta</div>
-      </div>
-      <button onclick="resetDatabase()" class="mt-2 py-2 px-3 rounded-xl bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 text-xs font-bold transition-all">
-        🔄 Bazani boshlang'ich holatga qaytarish
-      </button>
-    </div>
-  `;
-
-  document.getElementById('admin-rooms-grid').innerHTML = doctors.map(doc => {
-    const currentInRoom = queue.find(q => q.doctorId === doc.id && q.status === 'in_progress');
-    const waitingList = queue.filter(q => q.doctorId === doc.id && q.status === 'waiting');
-    return `
-      <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 flex flex-col justify-between">
-        <div>
-          <div class="flex items-center justify-between text-xs font-bold text-teal-700 mb-1">
-            <span>${doc.specialty} (${doc.room})</span>
-            <span class="text-[11px] font-mono text-slate-500">Login: ${doc.login} | PIN: ${doc.pin}</span>
-          </div>
-          <h4 class="font-extrabold text-slate-900 text-base">${doc.name}</h4>
-          <p class="text-[11px] text-slate-500 mb-3 truncate">${doc.region} • ${doc.clinic}</p>
-          <div class="text-xs space-y-1 bg-white p-3 rounded-xl border border-slate-200/80 mb-3">
-            <div>Xonada: <strong class="text-emerald-700">${currentInRoom ? `${currentInRoom.ticketNo} (${currentInRoom.patientName})` : "Bo'sh"}</strong></div>
-            <div>Navbatda: <strong class="text-amber-700">${waitingList.length} kishi</strong></div>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick="callNextPatient(${doc.id})" class="flex-1 py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-sm transition-all">
-            📢 Keyingisini chaqirish
-          </button>
-          <button onclick="deleteDoctor(${doc.id})" title="Shifokorni bazadan o'chirish" class="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold">
-            🗑️
-          </button>
-        </div>
-      </div>
-    `;
-  }).join('');
-
-  const activeTickets = queue.filter(q => q.status !== 'completed');
-  document.getElementById('admin-all-tickets').innerHTML = activeTickets.length === 0
-    ? '<p class="text-sm text-slate-500">Hozircha faol talonlar yo\'q.</p>'
-    : activeTickets.map(t => `
-      <div class="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <span class="text-base font-black text-teal-700">${t.ticketNo}</span>
-          <span class="ml-2 text-sm font-bold text-slate-900">${t.patientName}</span>
-          <span class="ml-2 text-xs text-slate-500">(${t.phone})</span>
-          <p class="text-xs text-slate-600 mt-0.5">${t.doctorName} • <strong>${t.room}</strong> • Soat: <strong>${t.time}</strong></p>
-        </div>
-        <div class="flex items-center gap-2">
-          <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${t.status === 'in_progress' ? 'bg-emerald-600 text-white' : 'bg-amber-100 text-amber-800'}">
-            ${t.status === 'in_progress' ? 'Xonada' : 'Kutmoqda'}
-          </span>
-          <button onclick="cancelTicket(${t.id})" class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200">
-            Bekor qilish
-          </button>
-        </div>
-      </div>
-    `).join('');
+  renderAdminStats();
+  renderAdminRooms();
+  renderAdminTickets();
 }
 
-function callNextPatient(docId) {
-  const doc = doctors.find(d => d.id === docId);
-  queue.forEach(q => {
-    if (q.doctorId === docId && q.status === 'in_progress') q.status = 'completed';
-  });
-  const next = queue.find(q => q.doctorId === docId && q.status === 'waiting');
-  if (next) {
-    next.status = 'in_progress';
-    showToast(`📢 ${next.ticketNo} (${next.patientName}) — ${doc.room}ga chaqirildi!`);
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(`Talon raqami ${next.ticketNo}. ${doc.room}ga kiring.`);
-      u.lang = 'uz-UZ';
-      window.speechSynthesis.speak(u);
-    }
+function renderAdminStats() {
+  const count = s => queue.filter(q => q.status === s).length;
+  const cards = [
+    ['Shifokorlar', doctors.length, 'bg-white border-teal-100', 'text-slate-900'],
+    ['Kutmoqda', count('waiting'), 'bg-amber-50/80 border-amber-200', 'text-amber-700'],
+    ['Qabulda', count('in_progress'), 'bg-emerald-50/80 border-emerald-200', 'text-emerald-700'],
+    ['Yakunlangan', count('completed'), 'bg-teal-50/80 border-teal-200', 'text-teal-700'],
+    ['Kelmagan / bekor', count('noshow') + count('cancelled'), 'bg-rose-50/80 border-rose-200', 'text-rose-700'],
+    ['Jami talonlar', queue.length, 'bg-white border-slate-200', 'text-slate-900']
+  ];
+  $('admin-stats-grid').innerHTML = cards.map(([l, v, box, txt]) => `
+    <div class="p-4 rounded-2xl border ${box}">
+      <div class="text-[11px] font-extrabold uppercase text-slate-500">${l}</div>
+      <div class="text-3xl font-black mt-1 ${txt}">${v}</div>
+    </div>`).join('');
+}
+
+function renderAdminRooms() {
+  const q = val('admin-doc-search').trim().toLowerCase();
+  const reg = val('admin-doc-region');
+  const list = doctors.filter(d =>
+    (!reg || d.region === reg) &&
+    (!q || [d.name, d.clinic, d.login, d.room, d.specialty].some(x => String(x).toLowerCase().includes(q)))
+  );
+  $('admin-doc-count').textContent = `${list.length} / ${doctors.length} ta`;
+
+  $('admin-rooms-grid').innerHTML = list.length === 0
+    ? '<p class="col-span-full text-sm text-slate-500">Shifokor topilmadi.</p>'
+    : list.map(doc => {
+      const cur = queue.find(x => x.doctorId === doc.id && x.status === 'in_progress');
+      const waiting = queue.filter(x => x.doctorId === doc.id && x.status === 'waiting').length;
+      return `
+      <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/70 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center justify-between gap-2 text-xs font-bold text-teal-700 mb-1">
+            <span>${esc(doc.specialty)} (${esc(doc.room)})</span>
+            <span class="text-[11px] font-mono text-slate-500">login: ${esc(doc.login)}</span>
+          </div>
+          <h4 class="font-extrabold text-slate-900 text-base">${esc(doc.name)}</h4>
+          <p class="text-[11px] text-slate-500 mb-3 truncate">${esc(doc.region)} • ${esc(doc.clinic)}</p>
+          <div class="text-xs space-y-1 bg-white p-3 rounded-xl border border-slate-200/80 mb-3">
+            <div>Xonada: <strong class="text-emerald-700">${cur ? `${esc(cur.ticketNo)} (${esc(cur.patientName)})` : "Bo'sh"}</strong></div>
+            <div>Navbatda: <strong class="text-amber-700">${waiting} kishi</strong> • Band slotlar: <strong>${doc.bookedSlots.length}/${ALL_TIME_SLOTS.length}</strong></div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="callNextPatient(${doc.id})" class="flex-1 py-2.5 px-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-sm">📢 Keyingisini chaqirish</button>
+          <button onclick="openDoctorForm(${doc.id})" title="Tahrirlash" class="p-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-bold">✏️</button>
+          <button onclick="deleteDoctor(${doc.id})" title="O'chirish" class="p-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold">🗑️</button>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function renderAdminTickets() {
+  const docSel = $('admin-ticket-doctor');
+  const prev = docSel.value;
+  docSel.innerHTML = '<option value="">Barcha shifokorlar</option>' +
+    doctors.map(d => `<option value="${d.id}">${esc(d.name)}</option>`).join('');
+  docSel.value = doctors.some(d => String(d.id) === prev) ? prev : '';
+
+  const st = val('admin-ticket-status') || 'active';
+  const q = val('admin-ticket-search').trim().toLowerCase();
+  const docId = docSel.value;
+  const order = { in_progress: 0, waiting: 1, completed: 2, noshow: 3, cancelled: 4 };
+
+  const list = queue.filter(t =>
+    (st === 'all' || (st === 'active' ? ACTIVE.includes(t.status) : t.status === st)) &&
+    (!docId || String(t.doctorId) === docId) &&
+    (!q || [t.ticketNo, t.patientName, t.phone, t.doctorName].some(x => String(x).toLowerCase().includes(q)))
+  ).sort((a, b) => order[a.status] - order[b.status] || sortByTime(a, b));
+
+  $('admin-ticket-count').textContent = `${list.length} ta talon`;
+  const btn = (fn, id, label, cls) => `<button onclick="${fn}(${id})" class="px-3 py-1.5 rounded-xl font-bold text-xs border ${cls}">${label}</button>`;
+
+  $('admin-all-tickets').innerHTML = list.length === 0
+    ? '<p class="text-sm text-slate-500">Bu filtr bo\'yicha talon topilmadi.</p>'
+    : list.map(t => {
+      const s = STATUS[t.status] || STATUS.waiting;
+      let actions = '';
+      if (t.status === 'waiting') {
+        actions = btn('callTicket', t.id, '📢 Chaqirish', 'bg-teal-600 text-white border-teal-600 hover:bg-teal-700') +
+          btn('markNoShow', t.id, 'Kelmadi', 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100') +
+          btn('adminCancelTicket', t.id, 'Bekor qilish', 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100');
+      } else if (t.status === 'in_progress') {
+        actions = btn('finishTicket', t.id, '✔ Yakunlash', 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700') +
+          btn('adminCancelTicket', t.id, 'Bekor qilish', 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100');
+      } else {
+        actions = btn('deleteTicket', t.id, "O'chirish", 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100');
+      }
+      return `
+      <div class="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+          <span class="text-base font-black text-teal-700">${esc(t.ticketNo)}</span>
+          <span class="ml-2 text-sm font-bold text-slate-900">${esc(t.patientName)}</span>
+          <span class="ml-2 text-xs text-slate-500">(${esc(t.phone)})</span>
+          <p class="text-xs text-slate-600 mt-0.5">${esc(t.doctorName)} • <strong>${esc(t.room)}</strong> • Soat: <strong>${esc(t.time)}</strong></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${s.cls}">${s.label}</span>${actions}
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function callTicket(id) {
+  const t = queue.find(q => q.id === id);
+  const doc = t && doctors.find(d => d.id === t.doctorId);
+  if (!t || !doc || t.status !== 'waiting') return;
+  completeCurrent(doc.id);
+  announce(t, doc);
+  refreshAll();
+}
+
+function finishTicket(id) {
+  const t = queue.find(q => q.id === id);
+  if (!t || t.status !== 'in_progress') return;
+  t.status = 'completed';
+  refreshAll();
+  showToast(`${t.ticketNo} qabuli yakunlandi`);
+}
+
+function markNoShow(id) {
+  const t = queue.find(q => q.id === id);
+  if (!t || t.status !== 'waiting') return;
+  if (!confirm(`${t.patientName} kelmadi deb belgilansinmi? Vaqt (${t.time}) bo'shatiladi.`)) return;
+  freeSlot(t);
+  t.status = 'noshow';
+  refreshAll();
+  showToast(`${t.ticketNo} — "kelmadi" deb belgilandi, vaqt bo'shatildi`);
+}
+
+function adminCancelTicket(id) {
+  const t = queue.find(q => q.id === id);
+  if (!t || !ACTIVE.includes(t.status)) return;
+  if (!confirm(`${t.ticketNo} (${t.patientName}) talonini bekor qilmoqchimisiz?`)) return;
+  freeSlot(t);
+  t.status = 'cancelled';
+  refreshAll();
+  showToast(`${t.ticketNo} bekor qilindi`);
+}
+
+function deleteTicket(id) {
+  const t = queue.find(q => q.id === id);
+  if (!t || ACTIVE.includes(t.status)) return;
+  queue = queue.filter(q => q.id !== id);
+  refreshAll();
+}
+
+function clearFinishedTickets() {
+  const n = queue.filter(q => !ACTIVE.includes(q.status)).length;
+  if (!n) return showToast("Tozalanadigan yozuv yo'q");
+  if (!confirm(`${n} ta yakunlangan/bekor qilingan yozuv tarixdan o'chirilsinmi?`)) return;
+  queue = queue.filter(q => ACTIVE.includes(q.status));
+  refreshAll();
+  showToast('Tarix tozalandi');
+}
+
+function exportTicketsCSV() {
+  if (!queue.length) return showToast("Eksport qilish uchun talon yo'q");
+  const cols = ['ticketNo', 'patientName', 'phone', 'doctorName', 'specialty', 'clinic', 'room', 'time', 'status'];
+  const head = ['Talon', 'Bemor', 'Telefon', 'Shifokor', "Yo'nalish", 'Klinika', 'Xona', 'Vaqt', 'Holat'];
+  const cell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const rows = queue.map(t => cols.map(c => cell(c === 'status' ? (STATUS[t.status]?.label || t.status) : t[c])).join(','));
+  const blob = new Blob(['\ufeff' + [head.map(cell).join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `doctime-talonlar-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------- Shifokor qo'shish / tahrirlash ---------- */
+function openDoctorForm(id) {
+  const doc = id ? doctors.find(d => d.id === id) : null;
+  hideError('doc-form-error');
+  $('doc-form-title').textContent = doc ? 'Shifokorni tahrirlash' : "Bazaga yangi shifokor qo'shish";
+  $('doc-form-id').value = doc ? doc.id : '';
+  $('doc-form-name').value = doc ? doc.name : '';
+  $('doc-form-spec').value = doc ? doc.specialty : SPECIALTIES[1].id;
+  $('doc-form-room').value = doc ? doc.room : '205-xona';
+  $('doc-form-region').value = doc ? doc.region : Object.keys(REGIONS_DATA)[0];
+  fillFormDistricts(doc ? doc.district : '');
+  $('doc-form-clinic').value = doc ? doc.clinic : '';
+  $('doc-form-type').value = doc ? doc.clinicType : 'Davlat';
+  $('doc-form-price').value = doc ? doc.price : "45 000 so'm";
+  $('doc-form-exp').value = doc ? parseInt(doc.experience, 10) || 1 : 5;
+  $('doc-form-login').value = doc ? doc.login : '';
+  $('doc-form-pin').value = doc ? doc.pin : '';
+  openModal('doctor-form-modal');
+}
+const openAddDoctorModal = () => openDoctorForm();
+const closeDoctorForm = () => closeModal('doctor-form-modal');
+
+function submitDoctorForm(e) {
+  e.preventDefault();
+  const id = Number(val('doc-form-id')) || null;
+  const name = val('doc-form-name').trim();
+  const login = val('doc-form-login').trim().toLowerCase();
+  const pin = val('doc-form-pin').trim();
+  const clinic = val('doc-form-clinic').trim();
+  const room = val('doc-form-room').trim();
+  const exp = Math.max(0, Math.min(60, parseInt(val('doc-form-exp'), 10) || 0));
+
+  if (name.length < 5) return showError('doc-form-error', "F.I.Sh ni to'liq kiriting.");
+  if (clinic.length < 3 || !room) return showError('doc-form-error', 'Shifoxona va xona raqamini kiriting.');
+  if (!/^[a-z0-9_]{3,20}$/.test(login)) return showError('doc-form-error', "Login 3–20 belgi: faqat lotin harflari, raqam va _ bo'lishi kerak.");
+  if (doctors.some(d => d.login.toLowerCase() === login && d.id !== id)) return showError('doc-form-error', 'Bu login band. Boshqasini tanlang.');
+  if (!/^\d{4}$/.test(pin)) return showError('doc-form-error', "PIN-kod aynan 4 ta raqamdan iborat bo'lishi kerak.");
+
+  const spec = val('doc-form-spec');
+  const data = {
+    name, specialty: spec, room, clinic, login, pin,
+    region: val('doc-form-region'), district: val('doc-form-district'),
+    clinicType: val('doc-form-type'), price: val('doc-form-price').trim() || 'Narx belgilanmagan',
+    experience: `${exp} yil`, prefix: spec.slice(0, 1).toUpperCase()
+  };
+
+  if (id) {
+    const doc = doctors.find(d => d.id === id);
+    if (!doc) return showError('doc-form-error', 'Shifokor topilmadi.');
+    Object.assign(doc, data);
+    queue.forEach(t => {
+      if (t.doctorId === id) Object.assign(t, { doctorName: doc.name, specialty: doc.specialty, clinic: doc.clinic, room: doc.room });
+    });
+    showToast(`✅ ${doc.name} ma'lumotlari yangilandi`);
   } else {
-    showToast(`${doc.name} xonasida kutayotgan bemorlar qolmadi.`);
+    const doc = { id: Date.now(), rating: 5.0, avatar: DEFAULT_DOCTORS[0].avatar, bookedSlots: [], ...data };
+    doctors.unshift(doc);
+    showToast(`✅ ${doc.name} bazaga saqlandi!`);
   }
-  saveDatabase();
-  renderDoctorPanel();
-  renderAdminPanel();
-  renderTablo();
+  closeDoctorForm();
+  refreshAll();
 }
 
 function deleteDoctor(docId) {
-  if (doctors.length <= 1) {
-    showToast("Tizimda kamida 1 ta shifokor qolishi kerak!");
-    return;
-  }
+  if (doctors.length <= 1) return showToast('Tizimda kamida 1 ta shifokor qolishi kerak!');
   const doc = doctors.find(d => d.id === docId);
+  if (!doc) return;
+  const active = queue.filter(q => q.doctorId === docId && ACTIVE.includes(q.status)).length;
+  const warn = active ? `\n\nDiqqat: ${active} ta faol talon ham o'chiriladi!` : '';
+  if (!confirm(`${doc.name} bazadan o'chirilsinmi?${warn}`)) return;
   doctors = doctors.filter(d => d.id !== docId);
   queue = queue.filter(q => q.doctorId !== docId);
-  saveDatabase();
-  renderDoctors();
-  renderAdminPanel();
+  refreshAll();
   showToast(`🗑️ ${doc.name} bazadan o'chirildi.`);
 }
 
-function openAddDoctorModal() {
-  const m = document.getElementById('add-doctor-modal');
-  m.classList.remove('hidden');
-  m.classList.add('flex');
-}
-
-function closeAddDoctorModal() {
-  const m = document.getElementById('add-doctor-modal');
-  m.classList.add('hidden');
-  m.classList.remove('flex');
-}
-
-function submitNewDoctor(e) {
-  e.preventDefault();
-  const name = document.getElementById('new-doc-name').value.trim();
-  const spec = document.getElementById('new-doc-spec').value;
-  const room = document.getElementById('new-doc-room').value.trim();
-  const region = document.getElementById('new-doc-region').value;
-  const clinic = document.getElementById('new-doc-clinic').value.trim();
-  const login = document.getElementById('new-doc-login').value.trim().toLowerCase();
-  const pin = document.getElementById('new-doc-pin').value.trim();
-
-  const districts = REGIONS_DATA[region] || ["Markaziy sh."];
-  const newDoc = {
-    id: Date.now(),
-    name,
-    specialty: spec,
-    region,
-    district: districts[0],
-    clinic,
-    clinicType: "Davlat",
-    room,
-    experience: "8 yil",
-    rating: 5.0,
-    price: "45 000 so'm",
-    prefix: spec.slice(0, 1).toUpperCase(),
-    login,
-    pin,
-    avatar: "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200&auto=format&fit=crop&q=80",
-    bookedSlots: []
-  };
-
-  doctors.unshift(newDoc);
-  saveDatabase();
-  closeAddDoctorModal();
-  document.getElementById('new-doc-name').value = '';
-  document.getElementById('new-doc-clinic').value = '';
-  document.getElementById('new-doc-login').value = '';
-  renderDoctors();
-  renderAdminPanel();
-  showToast(`✅ ${newDoc.name} bazaga saqlandi!`);
-}
-
+/* ---------- Registraturadan talon ---------- */
 function openWalkInModal() {
-  const sel = document.getElementById('walkin-doc-select');
-  sel.innerHTML = doctors.map(d => `<option value="${d.id}">${d.name} — ${d.specialty} (${d.room})</option>`).join('');
-  const m = document.getElementById('walkin-modal');
-  m.classList.remove('hidden');
-  m.classList.add('flex');
+  $('walkin-doc-select').innerHTML = doctors.map(d => `<option value="${d.id}">${esc(d.name)} — ${esc(d.specialty)} (${esc(d.room)})</option>`).join('');
+  hideError('walkin-error');
+  updateWalkInSlots();
+  openModal('walkin-modal');
+}
+
+function updateWalkInSlots() {
+  const doc = doctors.find(d => d.id === Number(val('walkin-doc-select')));
+  const free = doc ? freeSlotsOf(doc) : [];
+  $('walkin-slot-select').innerHTML = free.map(s => `<option value="${s}">${s}</option>`).join('') +
+    `<option value="">Qo'shimcha (kun oxirida)</option>`;
 }
 
 function closeWalkInModal() {
-  const m = document.getElementById('walkin-modal');
-  m.classList.add('hidden');
-  m.classList.remove('flex');
+  closeModal('walkin-modal');
+  $('walkin-patient-name').value = '';
+  $('walkin-patient-phone').value = '+998 ';
 }
 
 function submitWalkInTicket(e) {
   e.preventDefault();
-  const docId = Number(document.getElementById('walkin-doc-select').value);
-  const name = document.getElementById('walkin-patient-name').value.trim();
-  const phone = document.getElementById('walkin-patient-phone').value.trim();
+  const doc = doctors.find(d => d.id === Number(val('walkin-doc-select')));
+  const name = val('walkin-patient-name').trim();
+  const phone = val('walkin-patient-phone').trim();
+  const slot = val('walkin-slot-select');
 
-  const doc = doctors.find(d => d.id === docId);
-  const freeSlots = ALL_TIME_SLOTS.filter(s => !doc.bookedSlots.includes(s));
-  const assignedTime = freeSlots[0] || "16:00 (Qo'shimcha)";
-  if (freeSlots[0]) doc.bookedSlots.push(freeSlots[0]);
+  if (!doc) return showError('walkin-error', 'Shifokorni tanlang.');
+  if (name.length < 3) return showError('walkin-error', "Bemor ismini to'liq kiriting.");
+  if (!isValidPhone(phone)) return showError('walkin-error', "Telefon raqamini to'liq kiriting: +998 XX XXX XX XX");
+  if (slot && doc.bookedSlots.includes(slot)) { updateWalkInSlots(); return showError('walkin-error', 'Bu vaqt band bo\'lib qoldi, boshqasini tanlang.'); }
+  if (hasActiveTicket(doc.id, phone)) return showError('walkin-error', 'Bu raqamga shu shifokorga faol talon allaqachon bor.');
 
-  const ticketNo = `${doc.prefix}-0${Math.floor(15 + Math.random() * 80)}`;
-  const newTicket = {
-    id: Date.now(),
-    ticketNo,
-    patientName: name,
-    phone,
-    doctorId: doc.id,
-    doctorName: doc.name,
-    specialty: doc.specialty,
-    clinic: doc.clinic,
-    room: doc.room,
-    time: assignedTime,
-    status: 'waiting'
-  };
-
-  queue.push(newTicket);
-  myTicketIds.unshift(newTicket.id);
-  saveDatabase();
-
+  const t = createTicket(doc, name, phone, slot || "16:00 (Qo'shimcha)");
   closeWalkInModal();
-  document.getElementById('walkin-patient-name').value = '';
-  renderDoctors();
-  renderAdminPanel();
-  renderTablo();
-  showToast(`🎟️ Registratura taloni bazaga saqlandi: ${ticketNo}`);
+  refreshAll();
+  showToast(`🎟️ Registratura taloni saqlandi: ${t.ticketNo} (${t.time})`);
+}
+
+/* ---------- Admin parolini almashtirish ---------- */
+function openPasswordModal() {
+  ['pw-old', 'pw-new', 'pw-confirm'].forEach(i => { $(i).value = ''; });
+  $('pw-login').value = adminCreds.login;
+  hideError('pw-error');
+  openModal('password-modal');
+}
+
+function submitPasswordChange(e) {
+  e.preventDefault();
+  const login = val('pw-login').trim().toLowerCase();
+  if (val('pw-old') !== String(adminCreds.pin)) return showError('pw-error', "Joriy parol noto'g'ri.");
+  if (!/^[a-z0-9_]{3,20}$/.test(login)) return showError('pw-error', "Login 3–20 belgi: lotin harflari, raqam yoki _.");
+  if (!/^\d{4,8}$/.test(val('pw-new'))) return showError('pw-error', "Yangi parol 4–8 ta raqamdan iborat bo'lishi kerak.");
+  if (val('pw-new') !== val('pw-confirm')) return showError('pw-error', 'Parollar bir xil emas.');
+  adminCreds = { login, pin: val('pw-new') };
+  saveDatabase();
+  closeModal('password-modal');
+  showToast('🔐 Admin login va paroli yangilandi');
 }
