@@ -31,3 +31,13 @@ html {
 .animate-fade-in {
   animation: fadeInScale 0.2s ease-out forwards;
 }
+
+/* Qo'shimcha */
+button:disabled { cursor: not-allowed; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #14b8a6; outline-offset: 2px; }
+body { padding-bottom: calc(5rem + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 768px) { body { padding-bottom: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .animate-fade-in, .animate-ping, .animate-pulse { animation: none; }
+}
