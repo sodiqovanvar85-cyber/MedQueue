@@ -67,7 +67,8 @@
       </nav>
 
       <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1.5 bg-slate-100/90 px-3 py-1.5 rounded-xl border border-slate-200/70 text-xs font-semibold text-slate-600">
+        <button id="auth-btn" onclick="openAuthModal()" aria-label="Kirish / Ro'yxatdan o'tish" class="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-md transition-colors"></button>
+        <div class="hidden sm:flex items-center gap-1.5 bg-slate-100/90 px-3 py-1.5 rounded-xl border border-slate-200/70 text-xs font-semibold text-slate-600">
           <i data-lucide="clock" class="w-3.5 h-3.5 text-teal-600"></i>
           <span id="live-clock">00:00</span>
         </div>
@@ -138,15 +139,15 @@
                   </div>
                   <div>
                     <h2 class="text-lg sm:text-xl font-bold text-slate-900">Joylashuvingiz</h2>
-                    <p class="text-xs sm:text-sm text-slate-500">O'z hududingizni tanlang</p>
+                    <p class="text-xs sm:text-sm text-slate-500">12 ta viloyatdan o'z hududingizni tanlang</p>
                   </div>
                 </div>
 
                 <div class="space-y-3.5">
                   <div>
-                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">1. Viloyatni tanlang</label>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">1. Viloyatni tanlang (12 ta viloyat)</label>
                     <select id="region-select" onchange="handleRegionChange()" class="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 focus:bg-white transition-all">
-                      <option value="">Viloyat</option>
+                      <option value="">Barcha viloyatlar (12 ta)</option>
                     </select>
                   </div>
 
@@ -315,6 +316,17 @@
       </div>
 
       <div id="admin-dashboard-box" class="hidden space-y-6">
+        <div class="bg-white rounded-3xl p-5 shadow-sm border border-amber-200">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <h3 class="text-base font-extrabold text-slate-900">🔔 So'nggi xabarnomalar <span id="admin-notif-unread" class="ml-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-xs font-bold empty:hidden"></span></h3>
+            <div class="flex gap-2">
+              <button onclick="markAllNotifsRead()" class="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold">Hammasini o'qilgan qilish</button>
+              <button onclick="clearNotifs()" class="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold">Tozalash</button>
+            </div>
+          </div>
+          <div id="admin-notifs" class="space-y-2 max-h-64 overflow-y-auto"></div>
+        </div>
+
         <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100 flex flex-wrap items-center justify-between gap-4">
           <div>
             <span class="text-xs font-extrabold uppercase px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">👑 BOSH ADMIN VA REGISTRATURA</span>
@@ -334,7 +346,25 @@
         <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
           <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-3 mb-4">
             <div>
-              <h3 class="text-lg font-extrabold text-slate-900">1. Shifokorlar va xonalar <span id="admin-doc-count" class="ml-1 text-xs font-bold text-slate-500"></span></h3>
+              <h3 class="text-lg font-extrabold text-slate-900">1. 👥 Ro'yxatdan o'tganlar (Foydalanuvchilar) <span id="admin-user-count" class="ml-1 text-xs font-bold text-slate-500"></span></h3>
+              <p class="text-xs text-slate-500">Ism, telefon, yuborilgan SMS kod, vaqt va holat. Demo rejimda SMS haqiqiy yuborilmaydi — kodlar shu yerda ko'rinadi.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <input id="admin-user-search" oninput="renderAdminUsers()" type="text" placeholder="Ism, telefon, viloyat..." aria-label="Foydalanuvchi qidirish" class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-teal-500" />
+              <select id="admin-user-status" onchange="renderAdminUsers()" aria-label="Holat filtri" class="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                <option value="all">Barchasi</option>
+                <option value="verified">Tasdiqlangan</option>
+                <option value="pending">Kod tasdiqlanmagan</option>
+              </select>
+            </div>
+          </div>
+          <div id="admin-users-list" class="space-y-3 max-h-[36rem] overflow-y-auto"></div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
+          <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-3 mb-4">
+            <div>
+              <h3 class="text-lg font-extrabold text-slate-900">2. Shifokorlar va xonalar <span id="admin-doc-count" class="ml-1 text-xs font-bold text-slate-500"></span></h3>
               <p class="text-xs text-slate-500">Navbatni chaqirish, shifokorni tahrirlash yoki o'chirish</p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -348,7 +378,7 @@
         <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
           <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-3 mb-4">
             <div>
-              <h3 class="text-lg font-extrabold text-slate-900">2. Talonlar <span id="admin-ticket-count" class="ml-1 text-xs font-bold text-slate-500"></span></h3>
+              <h3 class="text-lg font-extrabold text-slate-900">3. Talonlar <span id="admin-ticket-count" class="ml-1 text-xs font-bold text-slate-500"></span></h3>
               <p class="text-xs text-slate-500">Chaqirish, "kelmadi" deb belgilash, bekor qilish va tarix</p>
             </div>
             <div class="flex flex-wrap gap-2">
@@ -371,7 +401,7 @@
         <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
           <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-3 mb-4">
             <div>
-              <h3 class="text-lg font-extrabold text-slate-900">3. Xabarlar (yordam markazi) <span id="admin-msg-unread" class="ml-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 text-xs font-bold"></span></h3>
+              <h3 class="text-lg font-extrabold text-slate-900">4. Xabarlar (yordam markazi) <span id="admin-msg-unread" class="ml-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 text-xs font-bold"></span></h3>
               <p class="text-xs text-slate-500">Bemorlarning savollariga javob bering. Shifokor–bemor yozishmalari maxfiy va bu yerda ko'rinmaydi.</p>
             </div>
             <div class="flex items-center gap-2 text-xs">
@@ -581,10 +611,60 @@
     <button data-tab="doctor" onclick="switchTab('doctor')" class="mnav-btn flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
       <i data-lucide="user-check" class="w-4 h-4 mb-0.5 text-teal-600"></i><span>Shifokor</span>
     </button>
-    <button data-tab="admin" onclick="switchTab('admin')" class="mnav-btn flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
+    <button data-tab="admin" onclick="switchTab('admin')" class="mnav-btn relative flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
+      <span id="mnav-admin-badge" class="hidden absolute top-0 right-3 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold items-center justify-center">0</span>
       <i data-lucide="shield-check" class="w-4 h-4 mb-0.5 text-amber-600"></i><span>Admin</span>
     </button>
   </nav>
+
+  <!-- SMS POP-UP (demo) -->
+  <div id="sms-pop" class="fixed top-20 right-4 left-4 sm:left-auto sm:w-96 z-[70] hidden bg-white rounded-2xl shadow-2xl border border-slate-200 p-4 animate-fade-in" role="alert">
+    <div class="flex items-start gap-3">
+      <div class="w-9 h-9 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0">💬</div>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between gap-2"><span class="text-xs font-extrabold text-slate-700">SMS • MedQueue</span><span id="sms-time" class="text-[10px] text-slate-400"></span></div>
+        <p id="sms-text" class="text-sm text-slate-800 mt-0.5 break-words"></p>
+      </div>
+      <button onclick="hideSms()" aria-label="Yopish" class="p-1 rounded-lg text-slate-400 hover:bg-slate-100">✕</button>
+    </div>
+  </div>
+
+  <!-- MODAL: KIRISH / RO'YXATDAN O'TISH -->
+  <div id="auth-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-teal-100 animate-fade-in my-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="auth-title" class="text-lg font-extrabold text-slate-900"></h3>
+        <button type="button" onclick="closeAuthModal()" aria-label="Yopish" class="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">✕</button>
+      </div>
+      <div id="auth-body"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: ADMIN TRIAJ (SHIFOKORGA YO'NALTIRISH) -->
+  <div id="triage-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-indigo-100 animate-fade-in my-auto">
+      <div class="flex items-center justify-between mb-3">
+        <h3 id="triage-title" class="text-lg font-extrabold text-slate-900"></h3>
+        <button type="button" onclick="closeTriage()" aria-label="Yopish" class="p-1.5 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">✕</button>
+      </div>
+      <p id="triage-info" class="text-sm text-slate-700 p-3 mb-4 rounded-2xl bg-indigo-50/60 border border-indigo-100"></p>
+      <form onsubmit="submitTriage(event)" class="space-y-3.5" autocomplete="off">
+        <div>
+          <label for="triage-doc-select" class="block text-xs font-bold uppercase text-slate-500 mb-1">Shifokor</label>
+          <select id="triage-doc-select" onchange="updateTriageSlots()" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm"></select>
+        </div>
+        <div>
+          <label for="triage-slot-select" class="block text-xs font-bold uppercase text-slate-500 mb-1">Vaqt</label>
+          <select id="triage-slot-select" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm"></select>
+        </div>
+        <p id="triage-error" class="text-xs font-bold text-rose-600 hidden"></p>
+        <div class="pt-1 flex gap-2">
+          <button type="button" onclick="closeTriage()" class="w-1/3 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs">Bekor qilish</button>
+          <button type="submit" class="w-2/3 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-lg">Biriktirish</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <!-- XABARLAR (CHAT) -->
   <button id="chat-fab" onclick="toggleChat()" aria-label="Xabarlar va yordam" class="fixed bottom-20 md:bottom-5 right-4 z-40 w-14 h-14 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 text-white text-2xl shadow-xl shadow-teal-600/30 hover:scale-105 transition-transform flex items-center justify-center">
