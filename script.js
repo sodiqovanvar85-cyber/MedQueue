@@ -50,12 +50,14 @@ const DEFAULT_QUEUE = [
 ];
 
 const DB_KEYS = {
-  DOCTORS: 'doctime_db_doctors_v1',
-  QUEUE: 'doctime_db_queue_v1',
-  MY_TICKETS: 'doctime_db_mytickets_v1',
-  ADMIN: 'doctime_db_admin_v1',
-  THREADS: 'doctime_db_threads_v1',
-  SETTINGS: 'doctime_db_settings_v1'
+  DOCTORS: 'medqueue_db_doctors_v1',
+  QUEUE: 'medqueue_db_queue_v1',
+  MY_TICKETS: 'medqueue_db_mytickets_v1',
+  ADMIN: 'medqueue_db_admin_v1',
+  THREADS: 'medqueue_db_threads_v1',
+  SETTINGS: 'medqueue_db_settings_v1',
+  USERS: 'medqueue_db_users_v1',
+  NOTIFS: 'medqueue_db_notifs_v1'
 };
 
 const ACTIVE = ['waiting', 'in_progress'];
@@ -84,18 +86,32 @@ function loadJSON(key, fallback) {
   return clone(fallback);
 }
 
+/* DocTime nomidan MedQueue ga o'tishda eski ma'lumotlarni saqlab qolish */
+(function migrateLegacyKeys() {
+  try {
+    Object.keys(localStorage).forEach(k => {
+      if (k.indexOf('doctime_') !== 0) return;
+      const nk = 'medqueue_' + k.slice('doctime_'.length);
+      if (localStorage.getItem(nk) === null) localStorage.setItem(nk, localStorage.getItem(k));
+    });
+  } catch (e) { /* ignore */ }
+})();
+
 let doctors = loadJSON(DB_KEYS.DOCTORS, DEFAULT_DOCTORS);
 let queue = loadJSON(DB_KEYS.QUEUE, DEFAULT_QUEUE);
 let myTicketIds = loadJSON(DB_KEYS.MY_TICKETS, [102]);
 let adminCreds = loadJSON(DB_KEYS.ADMIN, { login: 'admin', pin: '7777' });
 let threads = loadJSON(DB_KEYS.THREADS, []);
+let users = loadJSON(DB_KEYS.USERS, []);
+let notifs = loadJSON(DB_KEYS.NOTIFS, []);
+let currentUserId = (() => { try { return Number(localStorage.getItem('medqueue_user')) || null; } catch (e) { return null; } })();
 let settings = loadJSON(DB_KEYS.SETTINGS, { followupDays: 14 });
 
 let selectedSpecialty = 'all';
 let activeBookingDocId = null;
 let selectedSlotTime = '';
-let loggedInDoctorId = Number(sessionStorage.getItem('doctime_doc_session')) || null;
-let isAdminLoggedIn = sessionStorage.getItem('doctime_admin_session') === '1';
+let loggedInDoctorId = Number(sessionStorage.getItem('medqueue_doc_session')) || null;
+let isAdminLoggedIn = sessionStorage.getItem('medqueue_admin_session') === '1';
 
 function saveDatabase() {
   syncThreads();
@@ -108,6 +124,8 @@ function saveDatabase() {
     localStorage.setItem(DB_KEYS.ADMIN, JSON.stringify(adminCreds));
     localStorage.setItem(DB_KEYS.THREADS, JSON.stringify(threads));
     localStorage.setItem(DB_KEYS.SETTINGS, JSON.stringify(settings));
+    localStorage.setItem(DB_KEYS.USERS, JSON.stringify(users));
+    localStorage.setItem(DB_KEYS.NOTIFS, JSON.stringify(notifs));
   } catch (e) {
     showToast("⚠️ Ma'lumotni saqlab bo'lmadi (brauzer xotirasi bloklangan yoki to'lgan)");
   }
@@ -128,17 +146,22 @@ function refreshAll() {
   renderDoctorPanel();
   renderAdminPanel();
   renderChat();
+  renderAuthUI();
 }
 
 function reloadFromStorage() {
+  const prevTop = notifs[0] ? notifs[0].id : 0;
   doctors = loadJSON(DB_KEYS.DOCTORS, DEFAULT_DOCTORS);
   queue = loadJSON(DB_KEYS.QUEUE, DEFAULT_QUEUE);
   myTicketIds = loadJSON(DB_KEYS.MY_TICKETS, [102]);
   adminCreds = loadJSON(DB_KEYS.ADMIN, { login: 'admin', pin: '7777' });
   threads = loadJSON(DB_KEYS.THREADS, []);
   settings = loadJSON(DB_KEYS.SETTINGS, { followupDays: 14 });
+  users = loadJSON(DB_KEYS.USERS, []);
+  notifs = loadJSON(DB_KEYS.NOTIFS, []);
   updateBadge();
-  renderDoctors(); renderTablo(); renderMyTickets(); renderDoctorPanel(); renderAdminPanel(); renderChat();
+  renderDoctors(); renderTablo(); renderMyTickets(); renderDoctorPanel(); renderAdminPanel(); renderChat(); renderAuthUI();
+  if (isAdminLoggedIn && notifs[0] && notifs[0].id !== prevTop && !notifs[0].read) showToast('🔔 ' + notifs[0].text);
 }
 
 function resetDatabase() {
@@ -147,8 +170,11 @@ function resetDatabase() {
   queue = clone(DEFAULT_QUEUE);
   myTicketIds = [102];
   threads = [];
+  users = [];
+  notifs = [];
+  setCurrentUser(null);
   loggedInDoctorId = null;
-  sessionStorage.removeItem('doctime_doc_session');
+  sessionStorage.removeItem('medqueue_doc_session');
   refreshAll();
   showToast("🔄 Baza boshlang'ich holatiga qaytarildi!");
 }
@@ -199,6 +225,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderMyTickets();
   renderDoctorPanel();
   renderChat();
+  renderAuthUI();
   updateClock();
   setInterval(updateClock, 1000);
   if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -371,14 +398,14 @@ function hasActiveTicket(docId, phone) {
   return queue.some(q => q.doctorId === docId && q.phone === phone && ACTIVE.includes(q.status));
 }
 
-function createTicket(doc, name, phone, time) {
+function createTicket(doc, name, phone, time, extra) {
   if (ALL_TIME_SLOTS.includes(time)) doc.bookedSlots.push(time);
   const t = {
     id: Date.now() + Math.floor(Math.random() * 1000),
     ticketNo: nextTicketNo(doc.prefix),
     patientName: name, phone,
     doctorId: doc.id, doctorName: doc.name, specialty: doc.specialty,
-    clinic: doc.clinic, room: doc.room, time, status: 'waiting'
+    clinic: doc.clinic, room: doc.room, time, status: 'waiting', ...(extra || {})
   };
   queue.push(t);
   return t;
@@ -399,6 +426,8 @@ function openBookingModal(docId, defaultSlot) {
   $('modal-doc-name').textContent = `${doc.name} (${doc.specialty})`;
   $('modal-doc-clinic').textContent = `${doc.clinic} • ${doc.room}`;
   hideError('booking-error');
+  const cu = getCurrentUser();
+  if (cu) { $('patient-name-input').value = cu.name; $('patient-phone-input').value = cu.phone; }
   renderModalSlots();
   openModal('booking-modal');
 }
@@ -453,8 +482,10 @@ function submitBooking(e) {
   if (!isValidPhone(phone)) return showError('booking-error', "Telefon raqamini to'liq kiriting: +998 XX XXX XX XX");
   if (hasActiveTicket(doc.id, phone)) return showError('booking-error', "Bu raqamga shu shifokorga faol talon allaqachon olingan.");
 
-  const t = createTicket(doc, name, phone, selectedSlotTime);
+  const cu = getCurrentUser();
+  const t = createTicket(doc, name, phone, selectedSlotTime, cu && cu.phone === phone ? { userId: cu.id, complaint: cu.complaint || '' } : {});
   myTicketIds.unshift(t.id);
+  addNotif('booking', `🎟️ ${name} (${phone}) qabulga yozildi: ${doc.name}, soat ${t.time}, talon ${t.ticketNo}`);
   closeBookingModal();
   $('patient-name-input').value = '';
   refreshAll();
@@ -464,8 +495,8 @@ function submitBooking(e) {
 
 /* ---------- Jonli tablo ---------- */
 function renderTablo() {
-  const inProg = queue.filter(q => q.status === 'in_progress');
-  const waiting = queue.filter(q => q.status === 'waiting').sort(sortByTime);
+  const inProg = queue.filter(q => q.status === 'in_progress' && !q.hideFromTablo);
+  const waiting = queue.filter(q => q.status === 'waiting' && !q.hideFromTablo).sort(sortByTime);
 
   $('tablo-inprogress').innerHTML = inProg.length === 0
     ? '<p class="text-slate-400 text-xs">Hozir xonalarda bemor yo\'q</p>'
@@ -545,6 +576,7 @@ function cancelTicket(id) {
   if (!confirm(`${t.ticketNo} talonini bekor qilmoqchimisiz?`)) return;
   freeSlot(t);
   t.status = 'cancelled';
+  addNotif('cancel', `❌ ${t.patientName} (${t.phone}) navbatni bekor qildi: ${t.ticketNo}, ${t.doctorName}, soat ${t.time}`);
   refreshAll();
   showToast("Talon bekor qilindi va shifokor vaqti bo'shatildi!");
 }
@@ -589,7 +621,7 @@ function handleDoctorOnlyLogin(e) {
   }
   delete attempts.doc;
   loggedInDoctorId = doc.id;
-  sessionStorage.setItem('doctime_doc_session', String(doc.id));
+  sessionStorage.setItem('medqueue_doc_session', String(doc.id));
   $('doc-login-input').value = '';
   $('doc-pin-input').value = '';
   hideError('doc-auth-error');
@@ -600,7 +632,7 @@ function handleDoctorOnlyLogin(e) {
 
 function logoutDoctor() {
   loggedInDoctorId = null;
-  sessionStorage.removeItem('doctime_doc_session');
+  sessionStorage.removeItem('medqueue_doc_session');
   renderDoctorPanel();
   updateChatBadge();
   showToast('Shifokor kabinetidan chiqildi');
@@ -614,7 +646,7 @@ function renderDoctorPanel() {
 
   if (!doc) {
     loggedInDoctorId = null;
-    sessionStorage.removeItem('doctime_doc_session');
+    sessionStorage.removeItem('medqueue_doc_session');
     loginBox.classList.remove('hidden');
     dashBox.classList.add('hidden');
     return;
@@ -643,6 +675,7 @@ function renderDoctorPanel() {
             <span class="text-lg font-black text-teal-800">${esc(i.ticketNo)}</span>
             <span class="ml-2 text-sm font-bold text-slate-800">${esc(i.patientName)}</span>
             <p class="text-xs text-slate-500">Soat: ${esc(i.time)} • Tel: ${esc(i.phone)}</p>
+            ${i.complaint ? `<p class="text-xs text-amber-700">Shikoyat: ${esc(i.complaint)}</p>` : ''}
           </div>
           <span class="px-3 py-1 rounded-lg text-xs font-bold shrink-0 ${STATUS[i.status].cls}">${i.status === 'in_progress' ? 'Xonada (Qabulda)' : 'Kutmoqda'}</span>
         </div>`).join('')}
@@ -660,7 +693,7 @@ function handleAdminLogin(e) {
   if (login === String(adminCreds.login).toLowerCase() && pin === String(adminCreds.pin)) {
     delete attempts.admin;
     isAdminLoggedIn = true;
-    sessionStorage.setItem('doctime_admin_session', '1');
+    sessionStorage.setItem('medqueue_admin_session', '1');
     $('admin-login-input').value = '';
     $('admin-pin-input').value = '';
     hideError('admin-auth-error');
@@ -675,7 +708,7 @@ function handleAdminLogin(e) {
 
 function logoutAdmin() {
   isAdminLoggedIn = false;
-  sessionStorage.removeItem('doctime_admin_session');
+  sessionStorage.removeItem('medqueue_admin_session');
   renderAdminPanel();
   updateChatBadge();
   showToast('Admin paneldan chiqildi');
@@ -692,7 +725,9 @@ function renderAdminPanel() {
   }
   loginBox.classList.add('hidden');
   dashBox.classList.remove('hidden');
+  renderAdminNotifs();
   renderAdminStats();
+  renderAdminUsers();
   renderAdminRooms();
   renderAdminTickets();
   renderAdminMessages();
@@ -788,13 +823,16 @@ function renderAdminTickets() {
       } else {
         actions = btn('deleteTicket', t.id, "O'chirish", 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100');
       }
+      if (t.status !== 'in_progress') actions += btn('openTriageForTicket', t.id, "👨‍⚕️ Yo'naltirish / O'zgartirish", 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100');
+      if (ACTIVE.includes(t.status)) actions += btn('toggleTablo', t.id, t.hideFromTablo ? '📺 Tabloga chiqarish' : '📺 Tablodan olib tashlash', t.hideFromTablo ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200');
       return `
       <div class="p-3.5 rounded-2xl border border-slate-200 bg-slate-50/50 flex flex-wrap items-center justify-between gap-3">
         <div class="min-w-0">
           <span class="text-base font-black text-teal-700">${esc(t.ticketNo)}</span>
           <span class="ml-2 text-sm font-bold text-slate-900">${esc(t.patientName)}</span>
           <span class="ml-2 text-xs text-slate-500">(${esc(t.phone)})</span>
-          <p class="text-xs text-slate-600 mt-0.5">${esc(t.doctorName)} • <strong>${esc(t.room)}</strong> • Soat: <strong>${esc(t.time)}</strong></p>
+          <p class="text-xs text-slate-600 mt-0.5">${esc(t.doctorName)} • <strong>${esc(t.room)}</strong> • Soat: <strong>${esc(t.time)}</strong>${t.hideFromTablo ? ' • <span class="text-slate-500">📺 tabloda yashirin</span>' : ''}</p>
+          ${t.complaint ? `<p class="text-xs text-amber-800">🩺 ${esc(t.complaint)}</p>` : ''}
         </div>
         <div class="flex flex-wrap items-center gap-2">
           <span class="px-2.5 py-1 rounded-lg text-xs font-bold ${s.cls}">${s.label}</span>${actions}
@@ -866,7 +904,7 @@ function exportTicketsCSV() {
   const blob = new Blob(['\ufeff' + [head.map(cell).join(','), ...rows].join('\r\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `doctime-talonlar-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = `medqueue-talonlar-${new Date().toISOString().slice(0, 10)}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1023,14 +1061,17 @@ let _cid = null;
 const followupDays = () => Math.max(1, Math.min(90, Number(settings.followupDays) || 14));
 const clientId = () => {
   if (_cid) return _cid;
-  try { _cid = localStorage.getItem('doctime_client_id'); } catch (e) { /* ignore */ }
+  try { _cid = localStorage.getItem('medqueue_client_id'); } catch (e) { /* ignore */ }
   if (!_cid) {
     _cid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    try { localStorage.setItem('doctime_client_id', _cid); } catch (e) { /* ignore */ }
+    try { localStorage.setItem('medqueue_client_id', _cid); } catch (e) { /* ignore */ }
   }
   return _cid;
 };
-const getProfile = () => loadJSON('doctime_profile', { name: '', phone: '' });
+const getProfile = () => {
+  const u = getCurrentUser();
+  return u ? { name: u.name, phone: u.phone } : loadJSON('medqueue_profile', { name: '', phone: '' });
+};
 const fmtTime = ts => {
   const d = new Date(ts), p = n => String(n).padStart(2, '0');
   return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -1056,7 +1097,7 @@ function syncThreads() {
       if (!t.completedAt) t.completedAt = Date.now();
       th.until = t.completedAt + followupDays() * 86400000;
     } else th.until = 0;
-    th.doctorName = t.doctorName; th.room = t.room;
+    th.doctorId = t.doctorId; th.doctorName = t.doctorName; th.specialty = t.specialty; th.room = t.room;
   });
 }
 
@@ -1117,7 +1158,9 @@ function updateChatBadge() {
   const sum = (arr, k) => arr.reduce((s, t) => s + (t[k] || 0), 0);
   setBadge('chat-fab-badge', sum(threads.filter(t => t.clientId === clientId()), 'unreadPatient'));
   setBadge('nav-doctor-badge', loggedInDoctorId ? sum(threads.filter(t => t.type === 'doctor' && t.doctorId === loggedInDoctorId), 'unreadStaff') : 0);
-  setBadge('nav-admin-badge', isAdminLoggedIn ? sum(threads.filter(t => t.type === 'support'), 'unreadStaff') : 0);
+  const adminN = isAdminLoggedIn ? sum(threads.filter(t => t.type === 'support'), 'unreadStaff') + notifs.filter(n => !n.read).length : 0;
+  setBadge('nav-admin-badge', adminN);
+  setBadge('mnav-admin-badge', adminN);
 }
 
 /* ---------- Umumiy ko'rinish ---------- */
@@ -1217,7 +1260,7 @@ function submitProfile(e) {
   const name = val('chat-prof-name').trim(), phone = val('chat-prof-phone').trim();
   if (name.length < 3) return showError('chat-prof-error', "Ismni to'liq kiriting.");
   if (!isValidPhone(phone)) return showError('chat-prof-error', "Telefon: +998 XX XXX XX XX");
-  try { localStorage.setItem('doctime_profile', JSON.stringify({ name, phone })); } catch (err) { /* ignore */ }
+  try { localStorage.setItem('medqueue_profile', JSON.stringify({ name, phone })); } catch (err) { /* ignore */ }
   chatAskProfile = false;
   sendChatMessage({ preventDefault() {} });
 }
@@ -1364,4 +1407,442 @@ function saveFollowupDays() {
   settings.followupDays = n;
   refreshAll();
   showToast(`Shifokorga yozish muddati: ${n} kun`);
+}
+
+/* ================= MEDQUEUE: RO'YXATDAN O'TISH (OTP), FOYDALANUVCHILAR, XABARNOMALAR, TRIAJ ================= */
+const CODE_TTL = 3 * 60 * 1000;       // kod 3 daqiqa amal qiladi
+const CODE_COOLDOWN = 30 * 1000;      // yangi kod uchun kutish
+const CODE_MAX_TRIES = 5;             // xato urinishlar soni
+let authMode = 'register';
+let authStep = 'form';
+let authUserId = null;
+let smsTimer;
+let triageTarget = null;
+
+const newId = () => Date.now() * 1000 + Math.floor(Math.random() * 1000);
+
+/* ---------- Sessiya ---------- */
+function setCurrentUser(id) {
+  currentUserId = id;
+  try {
+    if (id) localStorage.setItem('medqueue_user', String(id));
+    else localStorage.removeItem('medqueue_user');
+  } catch (e) { /* ignore */ }
+}
+
+function getCurrentUser() {
+  if (!currentUserId) return null;
+  const u = users.find(x => x.id === currentUserId && x.status === 'verified');
+  if (!u) setCurrentUser(null);
+  return u || null;
+}
+
+function genCode() {
+  const a = new Uint32Array(1);
+  if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(a);
+  else a[0] = Math.floor(Math.random() * 4294967295);
+  return String(1000 + (a[0] % 9000));
+}
+
+const cooldownLeft = u => Math.max(0, Math.ceil((u.codeSentAt + CODE_COOLDOWN - Date.now()) / 1000));
+
+/* ---------- SMS pop-up (demo) ---------- */
+function showSms(phone, code) {
+  $('sms-text').textContent = `📲 SMS (${phone}): Sizning tasdiqlash kodingiz: ${code}`;
+  $('sms-time').textContent = fmtTime(Date.now());
+  $('sms-pop').classList.remove('hidden');
+  clearTimeout(smsTimer);
+  smsTimer = setTimeout(hideSms, 25000);
+}
+function hideSms() { $('sms-pop').classList.add('hidden'); }
+
+/* ---------- Kirish / Ro'yxatdan o'tish oynasi ---------- */
+function renderAuthUI() {
+  const b = $('auth-btn');
+  if (!b) return;
+  const u = getCurrentUser();
+  b.innerHTML = u
+    ? `<span class="w-6 h-6 rounded-full bg-teal-600 text-white text-xs font-bold flex items-center justify-center">${esc(u.name.trim().charAt(0).toUpperCase())}</span><span class="hidden sm:inline max-w-[8rem] truncate">${esc(u.name.trim().split(' ')[0])}</span>`
+    : `<span>👤</span><span class="hidden sm:inline">Kirish / Ro'yxatdan o'tish</span><span class="sm:hidden">Kirish</span>`;
+}
+
+function openAuthModal(mode) {
+  if (getCurrentUser()) authStep = 'account';
+  else { authStep = 'form'; if (mode) authMode = mode; }
+  renderAuth();
+  openModal('auth-modal');
+}
+function closeAuthModal() { closeModal('auth-modal'); }
+function setAuthMode(m) { authMode = m; authStep = 'form'; renderAuth(); }
+function backToAuthForm() { authStep = 'form'; renderAuth(); }
+
+function renderAuth() {
+  const body = $('auth-body');
+  const title = $('auth-title');
+  const inputCls = 'w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500';
+  const lbl = 'block text-xs font-bold uppercase text-slate-500 mb-1';
+
+  if (authStep === 'account') {
+    const u = getCurrentUser();
+    if (!u) { authStep = 'form'; return renderAuth(); }
+    const mine = queue.filter(q => (q.userId === u.id || q.phone === u.phone) && ACTIVE.includes(q.status)).length;
+    title.textContent = 'Mening profilim';
+    body.innerHTML = `
+      <div class="p-4 rounded-2xl bg-teal-50/60 border border-teal-200 space-y-1 text-sm">
+        <div class="text-lg font-extrabold text-slate-900">${esc(u.name)}</div>
+        <div>📞 ${esc(u.phone)}</div>
+        <div>📍 ${esc(u.region)}</div>
+        ${u.complaint ? `<div class="text-xs text-slate-600">🩺 Shikoyat: ${esc(u.complaint)}</div>` : ''}
+        <div class="text-xs text-teal-700 font-bold pt-1">Faol talonlar: ${mine}</div>
+      </div>
+      <button onclick="logoutUser()" class="mt-4 w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-sm">Chiqish</button>`;
+    return;
+  }
+
+  title.textContent = authStep === 'code' ? 'SMS kodni kiriting' : "Kirish / Ro'yxatdan o'tish";
+
+  if (authStep === 'code') {
+    const u = users.find(x => x.id === authUserId);
+    if (!u) { authStep = 'form'; return renderAuth(); }
+    body.innerHTML = `
+      <p class="text-sm text-slate-600 mb-1"><strong>${esc(u.phone)}</strong> raqamiga 4 xonali kod yuborildi.</p>
+      <p class="text-[11px] text-slate-400 mb-4">Demo rejim: SMS ekranning yuqorisida pop-up ko'rinishida chiqadi. Kod 3 daqiqa amal qiladi.</p>
+      <form onsubmit="verifyCode(event)" class="space-y-3" autocomplete="off">
+        <div>
+          <label for="auth-code" class="${lbl}">Tasdiqlash kodi</label>
+          <input id="auth-code" inputmode="numeric" pattern="\\d{4}" maxlength="4" required autocomplete="one-time-code" placeholder="0000" class="${inputCls} text-center text-2xl font-black tracking-[0.5em]" />
+        </div>
+        <p id="auth-error" class="text-xs font-bold text-rose-600 hidden"></p>
+        <button type="submit" class="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-lg">Tasdiqlash</button>
+        <div class="flex items-center justify-between text-xs font-bold">
+          <button type="button" onclick="backToAuthForm()" class="text-slate-500 hover:text-slate-700">← Raqamni o'zgartirish</button>
+          <button type="button" onclick="resendCode()" class="text-teal-700 hover:text-teal-900">Kodni qayta yuborish</button>
+        </div>
+      </form>`;
+    setTimeout(() => { const i = $('auth-code'); if (i) i.focus(); }, 30);
+    return;
+  }
+
+  const tab = m => `class="flex-1 py-2 rounded-xl text-xs font-bold transition-all ${authMode === m ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-600'}"`;
+  const regions = Object.keys(REGIONS_DATA);
+  body.innerHTML = `
+    <div class="p-1.5 mb-4 bg-slate-100 rounded-2xl flex gap-1.5">
+      <button type="button" onclick="setAuthMode('register')" ${tab('register')}>Ro'yxatdan o'tish</button>
+      <button type="button" onclick="setAuthMode('login')" ${tab('login')}>Kirish</button>
+    </div>
+    <form onsubmit="requestCode(event)" class="space-y-3" autocomplete="off">
+      ${authMode === 'register' ? `
+      <div><label for="auth-name" class="${lbl}">Ism-familiya</label>
+        <input id="auth-name" required maxlength="60" placeholder="Aliyev Vali" class="${inputCls}" /></div>` : ''}
+      <div><label for="auth-phone" class="${lbl}">Telefon raqami</label>
+        <input id="auth-phone" type="tel" required value="+998 " oninput="formatPhone(this)" class="${inputCls}" /></div>
+      ${authMode === 'register' ? `
+      <div><label for="auth-region" class="${lbl}">Viloyat</label>
+        <select id="auth-region" required class="${inputCls}"><option value="">Viloyatni tanlang</option>${regions.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('')}</select></div>
+      <div><label for="auth-complaint" class="${lbl}">Shikoyat (ixtiyoriy)</label>
+        <textarea id="auth-complaint" rows="2" maxlength="300" placeholder="Masalan: 3 kundan beri bosh og'rig'i" class="${inputCls}"></textarea></div>` : ''}
+      <p id="auth-error" class="text-xs font-bold text-rose-600 hidden"></p>
+      <button type="submit" class="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-lg">Kod olish</button>
+    </form>`;
+}
+
+function issueCode(u) {
+  u.code = genCode();
+  u.codeSentAt = Date.now();
+  u.codeUsed = false;
+  u.tries = 0;
+  u.clientId = clientId();
+  showSms(u.phone, u.code);
+}
+
+function requestCode(e) {
+  e.preventDefault();
+  const phone = val('auth-phone').trim();
+  if (!isValidPhone(phone)) return showError('auth-error', "Telefon raqamini to'liq kiriting: +998 XX XXX XX XX");
+  let u = users.find(x => x.phone === phone);
+
+  if (authMode === 'register') {
+    const name = val('auth-name').trim();
+    const region = val('auth-region');
+    const complaint = val('auth-complaint').trim().slice(0, 300);
+    if (name.length < 3) return showError('auth-error', "Ism-familiyani to'liq kiriting.");
+    if (!region) return showError('auth-error', 'Viloyatni tanlang.');
+    if (u && u.status === 'verified') return showError('auth-error', "Bu raqam allaqachon ro'yxatdan o'tgan. «Kirish» bo'limidan foydalaning.");
+    if (!u) {
+      u = { id: newId(), phone, status: 'pending', registeredAt: Date.now(), tries: 0 };
+      users.unshift(u);
+    }
+    Object.assign(u, { name, region, complaint });
+  } else if (!u || u.status !== 'verified') {
+    return showError('auth-error', "Bu raqam topilmadi. Avval «Ro'yxatdan o'tish» bo'limidan o'ting.");
+  }
+
+  authUserId = u.id;
+  authStep = 'code';
+  if (u.code && !u.codeUsed && Date.now() - u.codeSentAt < CODE_COOLDOWN) showSms(u.phone, u.code); // oldingi kodni qayta ko'rsatamiz
+  else issueCode(u);
+  refreshAll();
+  renderAuth();
+}
+
+function resendCode() {
+  const u = users.find(x => x.id === authUserId);
+  if (!u) return;
+  const wait = cooldownLeft(u);
+  if (wait) return showError('auth-error', `Yangi kod uchun ${wait} soniya kuting.`);
+  issueCode(u);
+  hideError('auth-error');
+  refreshAll();
+  showToast('📲 Yangi kod yuborildi');
+}
+
+function verifyCode(e) {
+  e.preventDefault();
+  const u = users.find(x => x.id === authUserId);
+  if (!u) { authStep = 'form'; return renderAuth(); }
+  const code = val('auth-code').trim();
+  if (u.codeUsed || !u.code) return showError('auth-error', 'Kod ishlatilgan. Yangi kod oling.');
+  if (Date.now() - u.codeSentAt > CODE_TTL) return showError('auth-error', 'Kod muddati tugagan. «Kodni qayta yuborish» ni bosing.');
+  if ((u.tries || 0) >= CODE_MAX_TRIES) return showError('auth-error', "Juda ko'p xato urinish. Yangi kod oling.");
+  if (code !== u.code) {
+    u.tries = (u.tries || 0) + 1;
+    saveDatabase();
+    return showError('auth-error', `Kod noto'g'ri. Qolgan urinishlar: ${Math.max(0, CODE_MAX_TRIES - u.tries)}`);
+  }
+
+  const first = u.status !== 'verified';
+  u.status = 'verified';
+  u.codeUsed = true;
+  if (first) u.verifiedAt = Date.now();
+  u.lastLoginAt = Date.now();
+  setCurrentUser(u.id);
+  adoptUserTickets(u);
+  if (first) addNotif('register', `🆕 ${u.name} (${u.phone}) ro'yxatdan o'tdi — ${u.region}`);
+  closeAuthModal();
+  hideSms();
+  refreshAll();
+  showToast(`✅ Xush kelibsiz, ${u.name.trim().split(' ')[0]}!`);
+}
+
+function adoptUserTickets(u) {
+  queue.filter(q => q.phone === u.phone && (ACTIVE.includes(q.status) || q.status === 'completed')).forEach(q => {
+    if (!myTicketIds.includes(q.id)) myTicketIds.unshift(q.id);
+    if (!q.userId) q.userId = u.id;
+  });
+}
+
+function logoutUser() {
+  setCurrentUser(null);
+  closeAuthModal();
+  refreshAll();
+  showToast('Profildan chiqildi');
+}
+
+/* ---------- Xabarnomalar ---------- */
+function addNotif(type, text) {
+  notifs.unshift({ id: newId(), type, text, ts: Date.now(), read: false });
+  if (notifs.length > 100) notifs.length = 100;
+}
+
+function renderAdminNotifs() {
+  const box = $('admin-notifs');
+  if (!box) return;
+  const unread = notifs.filter(n => !n.read).length;
+  $('admin-notif-unread').textContent = unread ? `${unread} yangi` : '';
+  const tone = { register: 'border-emerald-200 bg-emerald-50', booking: 'border-teal-200 bg-teal-50', cancel: 'border-rose-200 bg-rose-50' };
+  box.innerHTML = notifs.length === 0
+    ? '<p class="text-sm text-slate-500">Hozircha yangi xabarnoma yo\'q.</p>'
+    : notifs.slice(0, 30).map(n => `
+      <button onclick="readNotif(${n.id})" class="w-full text-left p-3 rounded-2xl border flex items-start justify-between gap-3 ${tone[n.type] || 'border-slate-200 bg-slate-50'} ${n.read ? 'opacity-60' : 'ring-1 ring-amber-300'}">
+        <span class="text-sm text-slate-800 break-words">${esc(n.text)}</span>
+        <span class="text-[11px] text-slate-500 shrink-0">${fmtTime(n.ts)}${n.read ? '' : ' • <strong class="text-rose-600">yangi</strong>'}</span>
+      </button>`).join('');
+}
+
+function readNotif(id) {
+  const n = notifs.find(x => x.id === id);
+  if (n && !n.read) { n.read = true; refreshAll(); }
+}
+function markAllNotifsRead() { notifs.forEach(n => { n.read = true; }); refreshAll(); }
+function clearNotifs() {
+  if (!notifs.length || !confirm("Barcha xabarnomalar o'chirilsinmi?")) return;
+  notifs = [];
+  refreshAll();
+}
+
+/* ---------- Admin: ro'yxatdan o'tganlar ---------- */
+const userTickets = u => queue.filter(q => q.userId === u.id || q.phone === u.phone);
+
+function codeState(u) {
+  if (!u.code) return ['—', 'text-slate-400'];
+  if (u.codeUsed) return ['Ishlatilgan', 'text-emerald-700'];
+  if (Date.now() - u.codeSentAt > CODE_TTL) return ['Muddati tugagan', 'text-rose-600'];
+  return ['Faol', 'text-amber-700'];
+}
+
+function renderAdminUsers() {
+  const box = $('admin-users-list');
+  if (!box) return;
+  const q = val('admin-user-search').trim().toLowerCase();
+  const st = val('admin-user-status') || 'all';
+  const list = users.filter(u =>
+    (st === 'all' || u.status === st) &&
+    (!q || [u.name, u.phone, u.region].some(x => String(x).toLowerCase().includes(q)))
+  ).sort((a, b) => b.registeredAt - a.registeredAt);
+  $('admin-user-count').textContent = `${list.length} / ${users.length} ta`;
+
+  box.innerHTML = list.length === 0
+    ? '<p class="text-sm text-slate-500">Foydalanuvchi topilmadi.</p>'
+    : list.map(u => {
+      const tix = userTickets(u);
+      const cur = tix.find(t => t.status === 'in_progress') || tix.filter(t => t.status === 'waiting').sort(sortByTime)[0];
+      const inRoom = tix.some(t => t.status === 'in_progress');
+      const [cs, ccls] = codeState(u);
+      const verified = u.status === 'verified';
+      return `
+      <div class="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0 flex-1 basis-56">
+          <div class="text-base font-extrabold text-slate-900">${esc(u.name)}</div>
+          <div class="text-sm text-slate-700">📞 ${esc(u.phone)}</div>
+          <div class="text-xs text-slate-500">📍 ${esc(u.region)}</div>
+          ${u.complaint ? `<div class="text-xs text-amber-800 mt-1">🩺 ${esc(u.complaint)}</div>` : ''}
+        </div>
+        <div class="text-center">
+          <div class="text-[10px] font-extrabold uppercase text-slate-500">SMS kod</div>
+          <div class="text-2xl font-black font-mono tracking-widest text-slate-900">${esc(u.code || '----')}</div>
+          <div class="text-[11px] font-bold ${ccls}">${cs}${u.tries ? ` • xato: ${u.tries}` : ''}</div>
+        </div>
+        <div class="text-xs text-slate-600 space-y-0.5 min-w-[9rem]">
+          <div>Ro'yxatdan: <strong>${fmtTime(u.registeredAt)}</strong></div>
+          <div>Tasdiqlandi: <strong>${u.verifiedAt ? fmtTime(u.verifiedAt) : '—'}</strong></div>
+          <div>Oxirgi kirish: <strong>${u.lastLoginAt ? fmtTime(u.lastLoginAt) : '—'}</strong></div>
+          <span class="inline-block mt-1 px-2.5 py-1 rounded-lg text-xs font-bold ${verified ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}">${verified ? '✅ Tasdiqlangan' : '⏳ Kod tasdiqlanmagan'}</span>
+        </div>
+        <div class="flex flex-col gap-2 min-w-[12rem]">
+          <div class="text-xs text-slate-600">${cur
+            ? `Talon: <strong>${esc(cur.ticketNo)}</strong> • ${esc(cur.doctorName)} • ${esc(cur.time)} <span class="px-1.5 py-0.5 rounded ${STATUS[cur.status].cls} text-[10px] font-bold">${STATUS[cur.status].label}</span>`
+            : 'Faol talon yo\'q'}</div>
+          <button onclick="openTriageForUser(${u.id})" ${inRoom ? 'disabled' : ''} class="px-3 py-2 rounded-xl font-bold text-xs border ${inRoom ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'}">${inRoom ? 'Hozir qabulda' : (cur ? "👨‍⚕️ Shifokorni o'zgartirish" : "👨‍⚕️ Shifokorga yo'naltirish")}</button>
+          <button onclick="deleteUser(${u.id})" class="px-3 py-1.5 rounded-xl font-bold text-xs border bg-white text-rose-600 border-rose-200 hover:bg-rose-50">O'chirish</button>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+function deleteUser(id) {
+  const u = users.find(x => x.id === id);
+  if (!u || !confirm(`${u.name} (${u.phone}) ro'yxatdan o'chirilsinmi? Uning talonlari saqlanib qoladi.`)) return;
+  users = users.filter(x => x.id !== id);
+  if (currentUserId === id) setCurrentUser(null);
+  refreshAll();
+  showToast("Foydalanuvchi o'chirildi");
+}
+
+/* ---------- Admin triaj: shifokorga yo'naltirish ---------- */
+function openTriageForUser(id) {
+  const u = users.find(x => x.id === id);
+  if (!u) return;
+  const tix = userTickets(u);
+  if (tix.some(t => t.status === 'in_progress')) return showToast('Bemor hozir qabulda — avval qabulni yakunlang.');
+  const cur = tix.filter(t => t.status === 'waiting').sort(sortByTime)[0];
+  triageTarget = cur
+    ? { mode: 'change', ticketId: cur.id }
+    : { mode: 'create', patient: { name: u.name, phone: u.phone, complaint: u.complaint || '', userId: u.id } };
+  openTriage();
+}
+
+function openTriageForTicket(id) {
+  const t = queue.find(q => q.id === id);
+  if (!t || t.status === 'in_progress') return;
+  triageTarget = t.status === 'completed'
+    ? { mode: 'create', patient: { name: t.patientName, phone: t.phone, complaint: t.complaint || '', userId: t.userId || null } }
+    : { mode: 'change', ticketId: id };
+  openTriage();
+}
+
+function openTriage() {
+  const t = triageTarget.mode === 'change' ? queue.find(q => q.id === triageTarget.ticketId) : null;
+  const p = t ? { name: t.patientName, phone: t.phone } : triageTarget.patient;
+  $('triage-title').textContent = t ? "Shifokorni o'zgartirish" : "Shifokorga yo'naltirish";
+  $('triage-info').innerHTML = `<strong>${esc(p.name)}</strong> (${esc(p.phone)})` +
+    (t ? `<br><span class="text-xs text-slate-500">Hozirgi talon: ${esc(t.ticketNo)} • ${esc(t.doctorName)} • ${esc(t.time)} • ${STATUS[t.status].label}</span>`
+      : '<br><span class="text-xs text-slate-500">Yangi talon yaratiladi.</span>');
+  $('triage-doc-select').innerHTML = doctors.map(d => `<option value="${d.id}">${esc(d.name)} — ${esc(d.specialty)} (${esc(d.room)})</option>`).join('');
+  if (t && doctors.some(d => d.id === t.doctorId)) $('triage-doc-select').value = String(t.doctorId);
+  updateTriageSlots();
+  hideError('triage-error');
+  openModal('triage-modal');
+}
+
+function updateTriageSlots() {
+  const doc = doctors.find(d => d.id === Number(val('triage-doc-select')));
+  const t = triageTarget && triageTarget.mode === 'change' ? queue.find(q => q.id === triageTarget.ticketId) : null;
+  const own = t && doc && t.doctorId === doc.id && ACTIVE.includes(t.status) && ALL_TIME_SLOTS.includes(t.time) ? t.time : null;
+  const free = doc ? ALL_TIME_SLOTS.filter(s => !doc.bookedSlots.includes(s) || s === own) : [];
+  $('triage-slot-select').innerHTML = free.map(s => `<option value="${s}">${s}${s === own ? ' (hozirgi)' : ''}</option>`).join('') +
+    `<option value="">Qo'shimcha (kun oxirida)</option>`;
+  if (own) $('triage-slot-select').value = own;
+}
+
+function closeTriage() { closeModal('triage-modal'); triageTarget = null; }
+
+function submitTriage(e) {
+  e.preventDefault();
+  if (!triageTarget) return;
+  const doc = doctors.find(d => d.id === Number(val('triage-doc-select')));
+  if (!doc) return showError('triage-error', 'Shifokorni tanlang.');
+  const slot = val('triage-slot-select');
+  const time = slot || "16:00 (Qo'shimcha)";
+  let patient, ticket;
+
+  if (triageTarget.mode === 'change') {
+    const t = queue.find(q => q.id === triageTarget.ticketId);
+    if (!t || t.status === 'in_progress') return showError('triage-error', 'Bu talonni hozir o\'zgartirib bo\'lmaydi.');
+    if (queue.some(q => q.id !== t.id && q.doctorId === doc.id && q.phone === t.phone && ACTIVE.includes(q.status))) {
+      return showError('triage-error', 'Bu bemorda shu shifokorga boshqa faol talon bor.');
+    }
+    const wasActive = ACTIVE.includes(t.status);
+    const ownSlot = wasActive && t.doctorId === doc.id && t.time === slot;
+    if (slot && doc.bookedSlots.includes(slot) && !ownSlot) return showError('triage-error', 'Bu vaqt band. Boshqasini tanlang.');
+    if (wasActive) freeSlot(t);
+    if (slot) doc.bookedSlots.push(slot);
+    Object.assign(t, { doctorId: doc.id, doctorName: doc.name, specialty: doc.specialty, clinic: doc.clinic, room: doc.room, time, status: 'waiting' });
+    delete t.completedAt;
+    patient = { name: t.patientName, phone: t.phone };
+    ticket = t;
+  } else {
+    patient = triageTarget.patient;
+    if (hasActiveTicket(doc.id, patient.phone)) return showError('triage-error', 'Bu bemorda shu shifokorga faol talon allaqachon bor.');
+    if (slot && doc.bookedSlots.includes(slot)) return showError('triage-error', 'Bu vaqt band. Boshqasini tanlang.');
+    ticket = createTicket(doc, patient.name, patient.phone, time, { userId: patient.userId || undefined, complaint: patient.complaint || '' });
+  }
+
+  const u = users.find(x => x.phone === patient.phone && x.status === 'verified');
+  if (u) {
+    u.assignedDoctorId = doc.id;
+    notifyPatient(u, `Admin sizni ${doc.name} (${doc.specialty}) qabuliga yo'naltirdi. Xona: ${doc.room}. Vaqt: ${time}. Talon: ${ticket.ticketNo}.`);
+  }
+  closeTriage();
+  refreshAll();
+  showToast(`👨‍⚕️ ${patient.name} → ${doc.name} (${time}) ga biriktirildi`);
+}
+
+function notifyPatient(u, text) {
+  if (!u || !u.clientId) return;
+  const id = 's-' + u.clientId;
+  let th = threads.find(t => t.id === id);
+  if (!th) {
+    th = { id, type: 'support', clientId: u.clientId, patientName: u.name, phone: u.phone, unreadPatient: 0, unreadStaff: 0, messages: [], updated: Date.now() };
+    threads.push(th);
+  }
+  postMessage(th, 'admin', text);
+}
+
+/* ---------- Admin: tabloni boshqarish ---------- */
+function toggleTablo(id) {
+  const t = queue.find(q => q.id === id);
+  if (!t) return;
+  t.hideFromTablo = !t.hideFromTablo;
+  refreshAll();
+  showToast(t.hideFromTablo ? `📺 ${t.ticketNo} tablodan olib tashlandi` : `📺 ${t.ticketNo} tabloga chiqarildi`);
 }
