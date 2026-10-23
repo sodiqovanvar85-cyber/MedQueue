@@ -53,7 +53,9 @@ const DB_KEYS = {
   DOCTORS: 'doctime_db_doctors_v1',
   QUEUE: 'doctime_db_queue_v1',
   MY_TICKETS: 'doctime_db_mytickets_v1',
-  ADMIN: 'doctime_db_admin_v1'
+  ADMIN: 'doctime_db_admin_v1',
+  THREADS: 'doctime_db_threads_v1',
+  SETTINGS: 'doctime_db_settings_v1'
 };
 
 const ACTIVE = ['waiting', 'in_progress'];
@@ -86,6 +88,8 @@ let doctors = loadJSON(DB_KEYS.DOCTORS, DEFAULT_DOCTORS);
 let queue = loadJSON(DB_KEYS.QUEUE, DEFAULT_QUEUE);
 let myTicketIds = loadJSON(DB_KEYS.MY_TICKETS, [102]);
 let adminCreds = loadJSON(DB_KEYS.ADMIN, { login: 'admin', pin: '7777' });
+let threads = loadJSON(DB_KEYS.THREADS, []);
+let settings = loadJSON(DB_KEYS.SETTINGS, { followupDays: 14 });
 
 let selectedSpecialty = 'all';
 let activeBookingDocId = null;
@@ -94,6 +98,7 @@ let loggedInDoctorId = Number(sessionStorage.getItem('doctime_doc_session')) || 
 let isAdminLoggedIn = sessionStorage.getItem('doctime_admin_session') === '1';
 
 function saveDatabase() {
+  syncThreads();
   const ids = new Set(queue.map(q => q.id));
   myTicketIds = myTicketIds.filter(id => ids.has(id));
   try {
@@ -101,6 +106,8 @@ function saveDatabase() {
     localStorage.setItem(DB_KEYS.QUEUE, JSON.stringify(queue));
     localStorage.setItem(DB_KEYS.MY_TICKETS, JSON.stringify(myTicketIds));
     localStorage.setItem(DB_KEYS.ADMIN, JSON.stringify(adminCreds));
+    localStorage.setItem(DB_KEYS.THREADS, JSON.stringify(threads));
+    localStorage.setItem(DB_KEYS.SETTINGS, JSON.stringify(settings));
   } catch (e) {
     showToast("⚠️ Ma'lumotni saqlab bo'lmadi (brauzer xotirasi bloklangan yoki to'lgan)");
   }
@@ -110,6 +117,7 @@ function saveDatabase() {
 function updateBadge() {
   const b = $('my-ticket-badge');
   if (b) b.textContent = queue.filter(q => myTicketIds.includes(q.id) && ACTIVE.includes(q.status)).length;
+  updateChatBadge();
 }
 
 function refreshAll() {
@@ -119,6 +127,7 @@ function refreshAll() {
   renderMyTickets();
   renderDoctorPanel();
   renderAdminPanel();
+  renderChat();
 }
 
 function reloadFromStorage() {
@@ -126,8 +135,10 @@ function reloadFromStorage() {
   queue = loadJSON(DB_KEYS.QUEUE, DEFAULT_QUEUE);
   myTicketIds = loadJSON(DB_KEYS.MY_TICKETS, [102]);
   adminCreds = loadJSON(DB_KEYS.ADMIN, { login: 'admin', pin: '7777' });
+  threads = loadJSON(DB_KEYS.THREADS, []);
+  settings = loadJSON(DB_KEYS.SETTINGS, { followupDays: 14 });
   updateBadge();
-  renderDoctors(); renderTablo(); renderMyTickets(); renderDoctorPanel(); renderAdminPanel();
+  renderDoctors(); renderTablo(); renderMyTickets(); renderDoctorPanel(); renderAdminPanel(); renderChat();
 }
 
 function resetDatabase() {
@@ -135,6 +146,7 @@ function resetDatabase() {
   doctors = clone(DEFAULT_DOCTORS);
   queue = clone(DEFAULT_QUEUE);
   myTicketIds = [102];
+  threads = [];
   loggedInDoctorId = null;
   sessionStorage.removeItem('doctime_doc_session');
   refreshAll();
@@ -186,6 +198,7 @@ window.addEventListener('DOMContentLoaded', () => {
   renderTablo();
   renderMyTickets();
   renderDoctorPanel();
+  renderChat();
   updateClock();
   setInterval(updateClock, 1000);
   if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -197,6 +210,7 @@ window.addEventListener('storage', e => {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') ['booking-modal', 'doctor-form-modal', 'walkin-modal', 'password-modal'].forEach(closeModal);
+    closeChat();
 });
 
 function updateClock() {
@@ -542,7 +556,7 @@ function announce(t, doc) {
 }
 
 function completeCurrent(docId) {
-  queue.forEach(q => { if (q.doctorId === docId && q.status === 'in_progress') q.status = 'completed'; });
+  queue.forEach(q => { if (q.doctorId === docId && q.status === 'in_progress') { q.status = 'completed'; q.completedAt = Date.now(); } });
 }
 
 function callNextPatient(docId) {
@@ -580,6 +594,7 @@ function handleDoctorOnlyLogin(e) {
   $('doc-pin-input').value = '';
   hideError('doc-auth-error');
   renderDoctorPanel();
+  updateChatBadge();
   showToast(`👨‍⚕️ Xush kelibsiz, ${doc.name}!`);
 }
 
@@ -587,6 +602,7 @@ function logoutDoctor() {
   loggedInDoctorId = null;
   sessionStorage.removeItem('doctime_doc_session');
   renderDoctorPanel();
+  updateChatBadge();
   showToast('Shifokor kabinetidan chiqildi');
 }
 
@@ -631,6 +647,7 @@ function renderDoctorPanel() {
           <span class="px-3 py-1 rounded-lg text-xs font-bold shrink-0 ${STATUS[i.status].cls}">${i.status === 'in_progress' ? 'Xonada (Qabulda)' : 'Kutmoqda'}</span>
         </div>`).join('')}
     </div>`;
+  renderDoctorMessages();
 }
 
 /* ================= ADMIN PANEL ================= */
@@ -648,6 +665,7 @@ function handleAdminLogin(e) {
     $('admin-pin-input').value = '';
     hideError('admin-auth-error');
     renderAdminPanel();
+    updateChatBadge();
     showToast('👑 Bosh Admin paneliga xush kelibsiz!');
   } else {
     failAttempt('admin');
@@ -659,6 +677,7 @@ function logoutAdmin() {
   isAdminLoggedIn = false;
   sessionStorage.removeItem('doctime_admin_session');
   renderAdminPanel();
+  updateChatBadge();
   showToast('Admin paneldan chiqildi');
 }
 
@@ -676,6 +695,7 @@ function renderAdminPanel() {
   renderAdminStats();
   renderAdminRooms();
   renderAdminTickets();
+  renderAdminMessages();
 }
 
 function renderAdminStats() {
@@ -796,6 +816,7 @@ function finishTicket(id) {
   const t = queue.find(q => q.id === id);
   if (!t || t.status !== 'in_progress') return;
   t.status = 'completed';
+  t.completedAt = Date.now();
   refreshAll();
   showToast(`${t.ticketNo} qabuli yakunlandi`);
 }
@@ -924,6 +945,7 @@ function deleteDoctor(docId) {
   if (!confirm(`${doc.name} bazadan o'chirilsinmi?${warn}`)) return;
   doctors = doctors.filter(d => d.id !== docId);
   queue = queue.filter(q => q.doctorId !== docId);
+  threads = threads.filter(t => t.doctorId !== docId);
   refreshAll();
   showToast(`🗑️ ${doc.name} bazadan o'chirildi.`);
 }
@@ -987,4 +1009,359 @@ function submitPasswordChange(e) {
   saveDatabase();
   closeModal('password-modal');
   showToast('🔐 Admin login va paroli yangilandi');
+}
+
+/* ================= XABARLAR (CHAT) ================= */
+let chatOpen = false;
+let chatTab = 'support';
+let chatThreadId = null;
+let chatAskProfile = false;
+let docChatId = null;
+let adminChatId = null;
+let _cid = null;
+
+const followupDays = () => Math.max(1, Math.min(90, Number(settings.followupDays) || 14));
+const clientId = () => {
+  if (_cid) return _cid;
+  try { _cid = localStorage.getItem('doctime_client_id'); } catch (e) { /* ignore */ }
+  if (!_cid) {
+    _cid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    try { localStorage.setItem('doctime_client_id', _cid); } catch (e) { /* ignore */ }
+  }
+  return _cid;
+};
+const getProfile = () => loadJSON('doctime_profile', { name: '', phone: '' });
+const fmtTime = ts => {
+  const d = new Date(ts), p = n => String(n).padStart(2, '0');
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+const FAQ = [
+  { q: 'Qanday yozilaman?', a: () => "«Qabulga yozilish» bo'limida viloyat va tumanni tanlang, shifokorning yashil rangdagi bo'sh soatini bosing, ism va telefon raqamingizni kiriting. Talon «Mening talonim» bo'limida paydo bo'ladi." },
+  { q: 'Navbatni qanday bekor qilaman?', a: () => "«Mening talonim» bo'limida «Navbatni bekor qilish» tugmasini bosing — vaqt avtomatik bo'shaydi. Kela olmasangiz, iltimos, oldindan bekor qiling." },
+  { q: 'Qabulga nima olib kelaman?', a: () => "Pasport yoki ID-karta, oldingi tahlil va xulosalar, doimiy ichadigan dorilar ro'yxatini olib keling." },
+  { q: 'Qabul vaqti va narxi', a: () => "Bugungi qabul soatlari odatda 08:30–14:00 oralig'ida. Aniq vaqt va narx har bir shifokor kartochkasida ko'rsatilgan." },
+  { q: 'Shifokorga savol bermoqchiman', a: () => `Qabulga yozilgan bo'lsangiz, yuqoridagi «Shifokor» yorlig'ida o'z shifokoringizga yozishingiz mumkin. Ko'rikdan keyin ham ${followupDays()} kun davomida savol berish mumkin.` },
+  { q: 'Operator bilan bog\'lanish', a: () => "Savolingizni pastdagi maydonga yozing — registratura xodimi javobni shu yerda yuboradi.", focus: true }
+];
+
+/* ---------- Ma'lumot funksiyalari ---------- */
+function syncThreads() {
+  threads.forEach(th => {
+    if (th.type !== 'doctor') return;
+    const t = queue.find(q => q.id === th.ticketId);
+    if (!t) return;
+    if (ACTIVE.includes(t.status)) th.until = null;
+    else if (t.status === 'completed') {
+      if (!t.completedAt) t.completedAt = Date.now();
+      th.until = t.completedAt + followupDays() * 86400000;
+    } else th.until = 0;
+    th.doctorName = t.doctorName; th.room = t.room;
+  });
+}
+
+const threadOpen = th => th.type === 'support' || th.until === null || th.until === undefined || Date.now() < th.until;
+
+function postMessage(th, from, text, silent) {
+  th.messages.push({ from, text, ts: Date.now() });
+  if (th.messages.length > 300) th.messages = th.messages.slice(-300);
+  th.updated = Date.now();
+  if (silent) return;
+  if (from === 'patient') th.unreadStaff = (th.unreadStaff || 0) + 1;
+  else th.unreadPatient = (th.unreadPatient || 0) + 1;
+}
+
+function ensureDoctorThreads() {
+  let changed = false;
+  queue.filter(t => myTicketIds.includes(t.id) && (ACTIVE.includes(t.status) || t.status === 'completed')).forEach(t => {
+    const id = 'd-' + t.id;
+    const existing = threads.find(x => x.id === id);
+    if (existing) {
+      /* talon shu brauzerga tegishli (yozilgan yoki kod+telefon bilan topilgan) — suhbatni qaytarib olamiz */
+      if (existing.clientId !== clientId()) { existing.clientId = clientId(); changed = true; }
+      return;
+    }
+    threads.push({
+      id, type: 'doctor', clientId: clientId(), ticketId: t.id, ticketNo: t.ticketNo,
+      doctorId: t.doctorId, doctorName: t.doctorName, specialty: t.specialty, room: t.room,
+      patientName: t.patientName, phone: t.phone, until: null,
+      unreadPatient: 0, unreadStaff: 0, messages: [], updated: Date.now()
+    });
+    changed = true;
+  });
+  if (changed) saveDatabase();
+}
+
+const myDoctorThreads = () => threads.filter(t => t.type === 'doctor' && t.clientId === clientId()).sort((a, b) => b.updated - a.updated);
+
+function getSupportThread(create) {
+  const id = 's-' + clientId();
+  let th = threads.find(t => t.id === id);
+  const p = getProfile();
+  if (!th && create) {
+    th = { id, type: 'support', clientId: clientId(), patientName: p.name || 'Mehmon', phone: p.phone || '', unreadPatient: 0, unreadStaff: 0, messages: [], updated: Date.now() };
+    threads.push(th);
+  }
+  if (th && create && p.name) { th.patientName = p.name; th.phone = p.phone; }
+  return th;
+}
+
+function setBadge(id, n) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = n;
+  el.classList.toggle('hidden', !n);
+}
+
+function updateChatBadge() {
+  const sum = (arr, k) => arr.reduce((s, t) => s + (t[k] || 0), 0);
+  setBadge('chat-fab-badge', sum(threads.filter(t => t.clientId === clientId()), 'unreadPatient'));
+  setBadge('nav-doctor-badge', loggedInDoctorId ? sum(threads.filter(t => t.type === 'doctor' && t.doctorId === loggedInDoctorId), 'unreadStaff') : 0);
+  setBadge('nav-admin-badge', isAdminLoggedIn ? sum(threads.filter(t => t.type === 'support'), 'unreadStaff') : 0);
+}
+
+/* ---------- Umumiy ko'rinish ---------- */
+function bubblesHtml(th, viewer) {
+  if (!th || !th.messages.length) return '<p class="text-center text-xs text-slate-400 py-6">Hozircha xabar yo\'q</p>';
+  return th.messages.map(m => {
+    const own = viewer === 'patient' ? m.from === 'patient' : (m.from === 'doctor' || m.from === 'admin');
+    const label = { doctor: 'Shifokor', admin: 'Registratura', bot: 'Yordamchi', patient: th.patientName }[m.from] || '';
+    const cls = own ? 'bg-teal-600 text-white rounded-br-md' : m.from === 'bot' ? 'bg-amber-50 text-slate-800 border border-amber-200 rounded-bl-md' : 'bg-slate-100 text-slate-800 rounded-bl-md';
+    return `<div class="flex ${own ? 'justify-end' : 'justify-start'}">
+      <div class="max-w-[85%] px-3.5 py-2 rounded-2xl text-sm whitespace-pre-wrap break-words ${cls}">
+        <div class="text-[10px] font-bold opacity-70 mb-0.5">${esc(label)} • ${fmtTime(m.ts)}</div>${esc(m.text)}
+      </div></div>`;
+  }).join('');
+}
+
+function untilText(th) {
+  if (th.type !== 'doctor') return '';
+  if (th.until === null || th.until === undefined) return "Qabulgacha va undan keyin ham yozishingiz mumkin.";
+  return threadOpen(th) ? `Yozish muddati: ${fmtTime(th.until)} gacha.` : "Yozish muddati tugagan. Yangi muammo bo'lsa, qayta qabulga yoziling.";
+}
+
+/* ---------- Bemor oynasi ---------- */
+function toggleChat() { chatOpen ? closeChat() : openChat(); }
+function openChat(tab, threadId) {
+  chatOpen = true;
+  if (tab) chatTab = tab;
+  if (threadId) chatThreadId = threadId;
+  openModal('chat-panel');
+  renderChat();
+  setTimeout(() => { const i = $('chat-input'); if (i && !i.classList.contains('hidden')) i.focus(); }, 50);
+}
+function closeChat() { chatOpen = false; closeModal('chat-panel'); }
+function switchChatTab(tab) { chatTab = tab; chatAskProfile = false; renderChat(); }
+function selectChatThread(id) { chatThreadId = id; renderChat(); }
+
+function renderChat() {
+  updateChatBadge();
+  if (!chatOpen) return;
+  const on = 'bg-white text-teal-700 shadow-sm', off = 'text-slate-600';
+  $('chat-tab-support').className = `flex-1 py-2 rounded-xl text-xs font-bold transition-all ${chatTab === 'support' ? on : off}`;
+  $('chat-tab-doctor').className = `flex-1 py-2 rounded-xl text-xs font-bold transition-all ${chatTab === 'doctor' ? on : off}`;
+  const body = $('chat-body'), form = $('chat-form'), input = $('chat-input');
+  let html = '', showForm = true;
+
+  if (chatTab === 'support') {
+    const th = getSupportThread(false);
+    if (th && th.unreadPatient) { th.unreadPatient = 0; saveDatabase(); }
+    html = `<div class="flex flex-wrap gap-1.5 mb-3">${FAQ.map((f, i) => `<button onclick="faqAsk(${i})" class="px-3 py-1.5 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-[11px] font-bold">${esc(f.q)}</button>`).join('')}</div>`;
+    if (chatAskProfile) {
+      html += `<form onsubmit="submitProfile(event)" class="p-3 mb-3 rounded-2xl bg-amber-50 border border-amber-200 space-y-2" autocomplete="off">
+        <p class="text-xs font-bold text-amber-900">Registratura sizga javob berishi uchun ma'lumotlaringizni kiriting:</p>
+        <input id="chat-prof-name" required maxlength="60" placeholder="Ism-familiya" class="w-full px-3 py-2 rounded-xl bg-white border border-amber-200 text-sm" />
+        <input id="chat-prof-phone" type="tel" required value="+998 " oninput="formatPhone(this)" class="w-full px-3 py-2 rounded-xl bg-white border border-amber-200 text-sm" />
+        <p id="chat-prof-error" class="text-xs font-bold text-rose-600 hidden"></p>
+        <button type="submit" class="w-full py-2 rounded-xl bg-teal-600 text-white font-bold text-xs">Saqlash va yuborish</button></form>`;
+    }
+    html += `<div class="space-y-2">${bubblesHtml(th, 'patient')}</div>`;
+  } else {
+    ensureDoctorThreads();
+    const list = myDoctorThreads();
+    if (!list.length) {
+      html = `<div class="text-center py-8 space-y-3"><p class="text-sm text-slate-600">Shifokorga yozish uchun avval qabulga yoziling.</p>
+        <button onclick="closeChat();switchTab('home')" class="px-4 py-2 rounded-xl bg-teal-600 text-white font-bold text-xs">Qabulga yozilish</button></div>`;
+      showForm = false;
+    } else {
+      if (!list.some(t => t.id === chatThreadId)) chatThreadId = list[0].id;
+      const th = list.find(t => t.id === chatThreadId);
+      if (th.unreadPatient) { th.unreadPatient = 0; saveDatabase(); }
+      const open = threadOpen(th);
+      showForm = open;
+      html = `<select onchange="selectChatThread(this.value)" aria-label="Shifokorni tanlang" class="w-full mb-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold">
+          ${list.map(t => `<option value="${esc(t.id)}" ${t.id === th.id ? 'selected' : ''}>${esc(t.ticketNo)} — ${esc(t.doctorName)}</option>`).join('')}</select>
+        <p class="text-[11px] text-slate-500 mb-2">${esc(untilText(th))}</p>
+        <div class="p-2.5 mb-3 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-800 font-semibold">⚠️ Shoshilinch holatda (kuchli og'riq, nafas qisilishi, hushdan ketish, qon ketishi) xabar yozmang — darhol <strong>103</strong> ga qo'ng'iroq qiling.</div>
+        <div class="space-y-2">${bubblesHtml(th, 'patient')}</div>`;
+    }
+  }
+  body.innerHTML = html;
+  body.scrollTop = body.scrollHeight;
+  form.classList.toggle('hidden', !showForm);
+  input.placeholder = chatTab === 'support' ? 'Savolingizni yozing...' : 'Shifokorga xabar yozing...';
+}
+
+function faqAsk(i) {
+  const f = FAQ[i];
+  const th = getSupportThread(true);
+  postMessage(th, 'patient', f.q, true);
+  postMessage(th, 'bot', f.a(), true);
+  saveDatabase();
+  renderChat();
+  if (f.focus) $('chat-input').focus();
+}
+
+function submitProfile(e) {
+  e.preventDefault();
+  const name = val('chat-prof-name').trim(), phone = val('chat-prof-phone').trim();
+  if (name.length < 3) return showError('chat-prof-error', "Ismni to'liq kiriting.");
+  if (!isValidPhone(phone)) return showError('chat-prof-error', "Telefon: +998 XX XXX XX XX");
+  try { localStorage.setItem('doctime_profile', JSON.stringify({ name, phone })); } catch (err) { /* ignore */ }
+  chatAskProfile = false;
+  sendChatMessage({ preventDefault() {} });
+}
+
+function sendChatMessage(e) {
+  e.preventDefault();
+  const text = val('chat-input').trim().slice(0, 500);
+  if (!text) return;
+  if (chatTab === 'support') {
+    if (!getProfile().name) { chatAskProfile = true; renderChat(); return; }
+    const th = getSupportThread(true);
+    postMessage(th, 'patient', text);
+    if (!th.messages.some(m => m.from === 'admin') && !th.messages.slice(-4, -1).some(m => m.ack)) {
+      postMessage(th, 'bot', "Xabaringiz registraturaga yuborildi. Javobni shu yerda ko'rasiz.", true);
+      th.messages[th.messages.length - 1].ack = true;
+    }
+  } else {
+    const th = threads.find(t => t.id === chatThreadId);
+    if (!th || !threadOpen(th)) return showToast('Bu suhbat uchun yozish muddati tugagan.');
+    postMessage(th, 'patient', text);
+  }
+  $('chat-input').value = '';
+  refreshAll();
+}
+
+/* ---------- Shifokor va admin uchun umumiy xabarlar bloki ---------- */
+function messengerHtml(list, cur, cfg) {
+  if (!list.length) return `<p class="text-sm text-slate-500">${cfg.empty}</p>`;
+  const items = list.map(t => {
+    const last = t.messages[t.messages.length - 1], un = t.unreadStaff || 0;
+    return `<button onclick="${cfg.sel}('${esc(t.id)}')" class="w-full text-left p-3 rounded-2xl border ${t.id === cur.id ? 'bg-teal-50 border-teal-300' : 'bg-white border-slate-200 hover:bg-slate-50'}">
+      <div class="flex items-center justify-between gap-2"><span class="text-sm font-bold text-slate-800 truncate">${esc(t.patientName)}</span>${un ? `<span class="px-1.5 py-0.5 rounded-full bg-rose-600 text-white text-[10px] font-bold">${un}</span>` : ''}</div>
+      <div class="text-[11px] text-slate-500 truncate">${t.type === 'doctor' ? esc(t.ticketNo) + ' • ' : ''}${esc(t.phone || 'telefon yo\'q')}</div>
+      <div class="text-[11px] text-slate-400 truncate">${last ? esc(last.text) : '—'}</div></button>`;
+  }).join('');
+  const open = threadOpen(cur);
+  return `<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="space-y-2 max-h-96 overflow-y-auto">${items}</div>
+    <div class="md:col-span-2 flex flex-col border border-slate-200 rounded-2xl overflow-hidden">
+      <div class="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2">
+        <div class="min-w-0"><div class="text-sm font-extrabold text-slate-900 truncate">${esc(cur.patientName)}</div>
+        <div class="text-[11px] text-slate-500 truncate">${esc(cur.phone || '')}${cur.type === 'doctor' ? ' • ' + esc(cur.ticketNo) : ''}${cur.type === 'doctor' ? ' • ' + esc(untilText(cur)) : ''}</div></div>
+        ${cfg.del ? `<button onclick="${cfg.del}('${esc(cur.id)}')" class="px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-bold shrink-0">O'chirish</button>` : ''}
+      </div>
+      <div id="${cfg.scroll}" class="p-3 space-y-2 h-72 overflow-y-auto bg-white">${bubblesHtml(cur, 'staff')}</div>
+      ${open ? `<form onsubmit="${cfg.submit}(event)" class="p-3 border-t border-slate-100 flex gap-2" autocomplete="off">
+        <input id="${cfg.input}" maxlength="500" required placeholder="Javob yozing..." class="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" />
+        <button type="submit" class="px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs">Yuborish</button></form>`
+        : '<p class="p-3 text-xs text-slate-500 border-t border-slate-100">Yozish muddati tugagan.</p>'}
+    </div></div>`;
+}
+
+function renderMessenger(boxId, html, inputId, scrollId) {
+  const old = $(inputId);
+  const draft = old ? old.value : '';
+  const focused = old && document.activeElement === old;
+  $(boxId).innerHTML = html;
+  const inp = $(inputId);
+  if (inp) { inp.value = draft; if (focused) inp.focus(); }
+  const sc = $(scrollId);
+  if (sc) sc.scrollTop = sc.scrollHeight;
+}
+
+const tabVisible = id => $(id) && !$(id).classList.contains('hidden');
+
+/* ---------- Shifokor: bemorlar xabarlari ---------- */
+function renderDoctorMessages() {
+  const box = $('dash-doc-messages');
+  if (!box) return;
+  const doc = loggedInDoctorId ? doctors.find(d => d.id === loggedInDoctorId) : null;
+  if (!doc) { box.innerHTML = ''; return; }
+  const list = threads.filter(t => t.type === 'doctor' && t.doctorId === doc.id).sort((a, b) => b.updated - a.updated);
+  if (!list.some(t => t.id === docChatId)) docChatId = list[0] ? list[0].id : null;
+  const cur = list.find(t => t.id === docChatId);
+  if (cur && cur.unreadStaff && tabVisible('tab-doctor')) { cur.unreadStaff = 0; saveDatabase(); }
+  const unread = list.reduce((s, t) => s + (t.unreadStaff || 0), 0);
+  const html = `<h3 class="text-base font-bold text-slate-800 mb-1">💬 Bemorlar xabarlari ${unread ? `<span class="ml-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-xs">${unread} yangi</span>` : ''}</h3>
+    <p class="text-xs text-slate-500 mb-3">Bemorlar ko'rikdan keyin ${followupDays()} kun davomida yozishi mumkin.</p>` +
+    messengerHtml(list, cur, { sel: 'selectDocThread', submit: 'submitDoctorReply', input: 'doc-reply-input', scroll: 'doc-chat-scroll', empty: "Hozircha bemorlardan xabar yo'q." });
+  renderMessenger('dash-doc-messages', html, 'doc-reply-input', 'doc-chat-scroll');
+}
+
+function selectDocThread(id) {
+  docChatId = id;
+  const i = $('doc-reply-input'); if (i) i.value = '';
+  renderDoctorMessages();
+  updateChatBadge();
+}
+
+function submitDoctorReply(e) {
+  e.preventDefault();
+  const th = threads.find(t => t.id === docChatId);
+  const text = val('doc-reply-input').trim().slice(0, 500);
+  if (!th || !text) return;
+  if (!threadOpen(th)) return showToast('Yozish muddati tugagan.');
+  postMessage(th, 'doctor', text);
+  $('doc-reply-input').value = '';
+  refreshAll();
+}
+
+/* ---------- Admin: yordam markazi ---------- */
+function renderAdminMessages() {
+  const box = $('admin-messages');
+  if (!box) return;
+  const fd = $('admin-followup-days');
+  if (fd && document.activeElement !== fd) fd.value = followupDays();
+  const list = threads.filter(t => t.type === 'support' && t.messages.length).sort((a, b) => b.updated - a.updated);
+  if (!list.some(t => t.id === adminChatId)) adminChatId = list[0] ? list[0].id : null;
+  const cur = list.find(t => t.id === adminChatId);
+  if (cur && cur.unreadStaff && tabVisible('tab-admin')) { cur.unreadStaff = 0; saveDatabase(); }
+  const unread = list.reduce((s, t) => s + (t.unreadStaff || 0), 0);
+  $('admin-msg-unread').textContent = unread ? `${unread} yangi` : '';
+  renderMessenger('admin-messages',
+    messengerHtml(list, cur, { sel: 'selectAdminThread', submit: 'submitAdminReply', input: 'admin-reply-input', scroll: 'admin-chat-scroll', del: 'deleteSupportThread', empty: "Hozircha bemorlardan murojaat yo'q." }),
+    'admin-reply-input', 'admin-chat-scroll');
+}
+
+function selectAdminThread(id) {
+  adminChatId = id;
+  const i = $('admin-reply-input'); if (i) i.value = '';
+  renderAdminMessages();
+  updateChatBadge();
+}
+
+function submitAdminReply(e) {
+  e.preventDefault();
+  const th = threads.find(t => t.id === adminChatId);
+  const text = val('admin-reply-input').trim().slice(0, 500);
+  if (!th || !text) return;
+  postMessage(th, 'admin', text);
+  $('admin-reply-input').value = '';
+  refreshAll();
+}
+
+function deleteSupportThread(id) {
+  if (!confirm("Bu suhbat butunlay o'chirilsinmi?")) return;
+  threads = threads.filter(t => t.id !== id);
+  refreshAll();
+}
+
+function saveFollowupDays() {
+  const n = parseInt(val('admin-followup-days'), 10);
+  if (!(n >= 1 && n <= 90)) return showToast("Muddat 1 dan 90 kungacha bo'lishi kerak.");
+  settings.followupDays = n;
+  refreshAll();
+  showToast(`Shifokorga yozish muddati: ${n} kun`);
 }
