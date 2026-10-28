@@ -68,6 +68,368 @@ function getTashkentDateISO() {
   return `${parts.find(p => p.type === 'year').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'day').value}`;
 }
 
+// =====================================================================
+// OFFLAYN REJIM: server topilmasa, ma'lumotlar Chrome xotirasida (localStorage) saqlanadi
+// Bu server.js ning vazifasini brauzerda taqlid qiladi (faqat shu brauzer uchun, demo rejim).
+// =====================================================================
+const LOCAL_DB_KEY = 'doctime_local_db_v1';
+let offlineMode = false;
+
+const LOCAL_SEED_DOCTORS = [
+  {"id": 1, "name": "Dr. Azizbek Rahimov", "specialty": "Kardiolog", "region": "Toshkent viloyati", "district": "Chirchiq sh.", "clinic": "Chirchiq Markaziy Poliklinikasi", "clinicType": "Davlat", "room": "204-xona", "experience": "14 yil", "rating": 4.9, "price": "Bepul / 45 000 so'm", "prefix": "K", "login": "kardiolog", "pin": "2040", "avatar": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["09:00", "09:30"]},
+  {"id": 2, "name": "Dr. Dilnoza Karimova", "specialty": "Pediatr", "region": "Toshkent viloyati", "district": "Qibray tumani", "clinic": "MedLine Kids Xususiy Klinikasi", "clinicType": "Xususiy", "room": "108-xona", "experience": "9 yil", "rating": 5, "price": "100 000 so'm", "prefix": "P", "login": "pediatr", "pin": "1080", "avatar": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["08:30", "11:00"]},
+  {"id": 3, "name": "Dr. Jamshid Rustamov", "specialty": "Stomatolog", "region": "Samarqand viloyati", "district": "Samarqand sh.", "clinic": "SamDent Stomatologiya Markazi", "clinicType": "Xususiy", "room": "12-xona", "experience": "11 yil", "rating": 4.8, "price": "80 000 so'm", "prefix": "S", "login": "stomatolog", "pin": "1200", "avatar": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["09:00"]},
+  {"id": 4, "name": "Dr. Malika To'xtayeva", "specialty": "Nevropatolog", "region": "Farg'ona viloyati", "district": "Farg'ona sh.", "clinic": "Farg'ona Diagnostika Markazi", "clinicType": "Davlat", "room": "305-xona", "experience": "17 yil", "rating": 4.9, "price": "35 000 so'm", "prefix": "N", "login": "nevro", "pin": "3050", "avatar": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["08:30", "10:00"]},
+  {"id": 5, "name": "Dr. Sardorbek Aliyev", "specialty": "Terapevt", "region": "Andijon viloyati", "district": "Andijon sh.", "clinic": "Andijon 1-sonli Oilaviy Poliklinika", "clinicType": "Davlat", "room": "101-xona", "experience": "12 yil", "rating": 4.7, "price": "Bepul", "prefix": "T", "login": "terapevt", "pin": "1010", "avatar": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["09:30"]},
+  {"id": 6, "name": "Dr. Gulnora Saidova", "specialty": "Okulist", "region": "Buxoro viloyati", "district": "Buxoro sh.", "clinic": "Buxoro Nur Ko'z Klinikasi", "clinicType": "Xususiy", "room": "210-xona", "experience": "15 yil", "rating": 5, "price": "90 000 so'm", "prefix": "O", "login": "okulist", "pin": "2100", "avatar": "https://images.unsplash.com/photo-1651008376811-b90baee60c1f?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["11:30"]},
+  {"id": 7, "name": "Dr. Otabek Xolmatov", "specialty": "LOR", "region": "Namangan viloyati", "district": "Namangan sh.", "clinic": "Namangan Shifo LOR Markazi", "clinicType": "Xususiy", "room": "114-xona", "experience": "10 yil", "rating": 4.9, "price": "70 000 so'm", "prefix": "L", "login": "lor", "pin": "1140", "avatar": "https://images.unsplash.com/photo-1582750433449-648ed127bb54?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["10:30"]},
+  {"id": 8, "name": "Dr. Shaxnoza Qodirova", "specialty": "Terapevt", "region": "Qashqadaryo viloyati", "district": "Qarshi sh.", "clinic": "Qarshi Markaziy Poliklinikasi", "clinicType": "Davlat", "room": "105-xona", "experience": "8 yil", "rating": 4.8, "price": "Bepul", "prefix": "T", "login": "qarshi", "pin": "1050", "avatar": "https://images.unsplash.com/photo-1614608682850-e0d6ed316d47?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["09:00"]},
+  {"id": 9, "name": "Dr. Ulug'bek Normatov", "specialty": "Kardiolog", "region": "Surxondaryo viloyati", "district": "Termiz sh.", "clinic": "Termiz Kardiologiya Markazi", "clinicType": "Davlat", "room": "201-xona", "experience": "16 yil", "rating": 4.9, "price": "35 000 so'm", "prefix": "K", "login": "termiz", "pin": "2010", "avatar": "https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["10:00"]},
+  {"id": 10, "name": "Dr. Feruza Matyoqubova", "specialty": "Pediatr", "region": "Xorazm viloyati", "district": "Urganch sh.", "clinic": "Urganch Bolalar Shifoxonasi", "clinicType": "Davlat", "room": "103-xona", "experience": "13 yil", "rating": 5, "price": "Bepul", "prefix": "P", "login": "urganch", "pin": "1030", "avatar": "https://images.unsplash.com/photo-1594824476967-48c8b964273f?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["08:30"]},
+  {"id": 11, "name": "Dr. Boburjon Hasanov", "specialty": "Nevropatolog", "region": "Navoiy viloyati", "district": "Navoiy sh.", "clinic": "Navoiy Med Standard", "clinicType": "Xususiy", "room": "208-xona", "experience": "11 yil", "rating": 4.8, "price": "85 000 so'm", "prefix": "N", "login": "navoiy", "pin": "2080", "avatar": "https://images.unsplash.com/photo-1622253692010-333f2da6031d?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["09:00"]},
+  {"id": 12, "name": "Dr. Nodira Bekmurodova", "specialty": "Terapevt", "region": "Jizzax viloyati", "district": "Jizzax sh.", "clinic": "Jizzax Shahar Poliklinikasi", "clinicType": "Davlat", "room": "110-xona", "experience": "14 yil", "rating": 4.9, "price": "Bepul", "prefix": "T", "login": "jizzax", "pin": "1100", "avatar": "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["09:30"]},
+  {"id": 13, "name": "Dr. Sanjarbek Yo'ldoshev", "specialty": "Stomatolog", "region": "Sirdaryo viloyati", "district": "Guliston sh.", "clinic": "Guliston Denta Lux", "clinicType": "Xususiy", "room": "15-xona", "experience": "9 yil", "rating": 4.8, "price": "75 000 so'm", "prefix": "S", "login": "guliston", "pin": "1500", "avatar": "https://images.unsplash.com/photo-1537368910025-700350fe46c7?w=200&auto=format&fit=crop&q=80", "bookedSlots": ["14:00"]}
+];
+
+function localNow() {
+  return new Date().toLocaleString('uz-UZ', { timeZone: 'Asia/Tashkent' });
+}
+
+function localSanitize(str = '') {
+  return String(str).replace(/[<>]/g, '').trim();
+}
+
+// Oddiy xesh (demo uchun; parol ochiq ko'rinmasligi uchun. Haqiqiy xavfsizlik emas!)
+function simpleHash(text) {
+  const s = String(text) + '|doctime_local_salt';
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+  return String(h >>> 0);
+}
+
+function localError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
+
+function localSeedDB() {
+  const today = getTashkentDateISO();
+  return {
+    adminAuth: { login: 'admin', passwordHash: simpleHash('7777') },
+    doctors: LOCAL_SEED_DOCTORS.map(({ pin, ...rest }) => ({ ...rest, pinHash: simpleHash(pin) })),
+    users: [
+      { id: 1001, name: 'Saida Nazarova', phone: '+998 93 456 78 90', email: 'saida.nazarova@mail.uz', registeredAt: localNow() }
+    ],
+    appointments: [
+      { id: 101, ticketNo: 'K-011', patientName: 'Olimjon Mahmudov', phone: '+998 90 123 45 67', email: '', doctorId: 1, doctorName: 'Dr. Azizbek Rahimov', specialty: 'Kardiolog', clinic: 'Chirchiq Markaziy Poliklinikasi', room: '204-xona', date: today, time: '09:00', price: "Bepul / 45 000 so'm", status: 'Tasdiqlandi', createdAt: localNow() },
+      { id: 102, ticketNo: 'K-012', patientName: 'Saida Nazarova', phone: '+998 93 456 78 90', email: 'saida.nazarova@mail.uz', doctorId: 1, doctorName: 'Dr. Azizbek Rahimov', specialty: 'Kardiolog', clinic: 'Chirchiq Markaziy Poliklinikasi', room: '204-xona', date: today, time: '09:30', price: "Bepul / 45 000 so'm", status: 'Kutilmoqda', createdAt: localNow() }
+    ],
+    messages: []
+  };
+}
+
+function localReadDB() {
+  try {
+    const raw = localStorage.getItem(LOCAL_DB_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) { /* buzilgan bo'lsa qayta yaratiladi */ }
+  const db = localSeedDB();
+  localWriteDB(db);
+  return db;
+}
+
+function localWriteDB(db) {
+  localStorage.setItem(LOCAL_DB_KEY, JSON.stringify(db));
+}
+
+function localPublicDoctors(doctors, appointments) {
+  const today = getTashkentDateISO();
+  return doctors.map(({ pinHash, login, ...pub }) => ({
+    ...pub,
+    bookedSlots: Array.from(new Set(
+      appointments
+        .filter(a => Number(a.doctorId) === Number(pub.id) && a.status !== 'Bekor qilindi' && (!a.date || a.date === today))
+        .map(a => a.time)
+    ))
+  }));
+}
+
+function localIsAdmin(headers) {
+  return String(headers['x-admin-token'] || '').startsWith('local-admin-');
+}
+function localIsDoctor(headers) {
+  return String(headers['x-doctor-token'] || '').startsWith('local-doc-');
+}
+
+const LOCAL_PHONE_RE = /^\+998 \d{2} \d{3} \d{2} \d{2}$/;
+
+async function localApi(path, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+  const headers = options.headers || {};
+  let body = {};
+  try { body = options.body ? JSON.parse(options.body) : {}; } catch (e) { body = {}; }
+  const cleanPath = path.split('?')[0];
+  let m;
+
+  // GET /api/data
+  if (method === 'GET' && cleanPath === '/api/data') {
+    const db = localReadDB();
+    return {
+      serverTime: localNow(),
+      todayISO: getTashkentDateISO(),
+      doctors: localPublicDoctors(db.doctors, db.appointments),
+      appointments: db.appointments,
+      messages: db.messages || []
+    };
+  }
+
+  // POST /api/appointments
+  if (method === 'POST' && cleanPath === '/api/appointments') {
+    const patientName = localSanitize(body.patientName);
+    const phone = localSanitize(body.phone);
+    const email = localSanitize(body.email);
+    const doctorId = Number(body.doctorId);
+    const date = localSanitize(body.date) || getTashkentDateISO();
+    const time = localSanitize(body.time);
+
+    if (patientName.length < 3) throw localError(400, "Bemor ism-sharifi kamida 3 ta harfdan iborat bo'lishi kerak!");
+    if (!LOCAL_PHONE_RE.test(phone)) throw localError(400, "Telefon raqamni to'liq kiriting (+998 XX XXX XX XX)!");
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw localError(400, "Email manzili noto'g'ri!");
+    if (!doctorId || !time) throw localError(400, "Shifokor va qabul vaqtini tanlang!");
+
+    const db = localReadDB();
+    const doc = db.doctors.find(d => Number(d.id) === doctorId);
+    if (!doc) throw localError(404, 'Shifokor topilmadi!');
+
+    const taken = db.appointments.some(a => Number(a.doctorId) === doctorId && a.date === date && a.time === time && a.status !== 'Bekor qilindi');
+    if (taken) throw localError(409, `Kechirasiz, ${doc.name} uchun ${date} kuni soat ${time} band qilingan! Boshqa vaqtni tanlang.`);
+
+    if (!db.users.find(u => u.phone === phone)) {
+      db.users.unshift({ id: Date.now() - 1, name: patientName, phone, email, registeredAt: localNow() });
+    }
+
+    const appointment = {
+      id: Date.now(),
+      ticketNo: `${doc.prefix}-0${Math.floor(10 + Math.random() * 89)}`,
+      patientName, phone, email,
+      doctorId: doc.id, doctorName: doc.name, specialty: doc.specialty,
+      clinic: doc.clinic, room: doc.room, date, time, price: doc.price,
+      status: 'Kutilmoqda', createdAt: localNow()
+    };
+    db.appointments.push(appointment);
+    localWriteDB(db);
+    return { success: true, appointment, doctors: localPublicDoctors(db.doctors, db.appointments) };
+  }
+
+  // POST /api/appointments/:id/cancel
+  if (method === 'POST' && (m = cleanPath.match(/^\/api\/appointments\/([^/]+)\/cancel$/))) {
+    const db = localReadDB();
+    const item = db.appointments.find(a => String(a.id) === String(m[1]));
+    if (!item) throw localError(404, 'Talon topilmadi!');
+    item.status = 'Bekor qilindi';
+    localWriteDB(db);
+    return { success: true, appointment: item, doctors: localPublicDoctors(db.doctors, db.appointments) };
+  }
+
+  // POST /api/doctor/login
+  if (method === 'POST' && cleanPath === '/api/doctor/login') {
+    const login = localSanitize(body.login).toLowerCase();
+    const pin = String(body.pin || '').trim();
+    const db = localReadDB();
+    const doc = db.doctors.find(d => String(d.login).toLowerCase() === login);
+    if (!doc || doc.pinHash !== simpleHash(pin)) throw localError(401, "Shifokor logini yoki PIN-kodi noto'g'ri!");
+    const { pinHash, ...safeDoc } = doc;
+    return { success: true, token: `local-doc-${doc.id}-${Date.now()}`, doctor: safeDoc };
+  }
+
+  // POST /api/doctor/:id/call-next
+  if (method === 'POST' && (m = cleanPath.match(/^\/api\/doctor\/([^/]+)\/call-next$/))) {
+    if (!localIsAdmin(headers) && !localIsDoctor(headers)) throw localError(403, 'Avtorizatsiya talab qilinadi!');
+    const doctorId = Number(m[1]);
+    const db = localReadDB();
+    if (!db.doctors.find(d => Number(d.id) === doctorId)) throw localError(404, 'Shifokor topilmadi!');
+    db.appointments.forEach(a => {
+      if (Number(a.doctorId) === doctorId && a.status === 'Tasdiqlandi') a.status = 'Yakunlandi';
+    });
+    const next = db.appointments.find(a => Number(a.doctorId) === doctorId && a.status === 'Kutilmoqda');
+    if (next) next.status = 'Tasdiqlandi';
+    localWriteDB(db);
+    return { success: true, calledTicket: next || null, appointments: db.appointments };
+  }
+
+  // POST /api/admin/login
+  if (method === 'POST' && cleanPath === '/api/admin/login') {
+    const login = localSanitize(body.login).toLowerCase();
+    const pin = String(body.pin || '').trim();
+    const db = localReadDB();
+    if (login === db.adminAuth.login && simpleHash(pin) === db.adminAuth.passwordHash) {
+      return { success: true, token: `local-admin-${Date.now()}` };
+    }
+    throw localError(401, "Admin logini yoki paroli noto'g'ri!");
+  }
+
+  // POST /api/admin/logout
+  if (method === 'POST' && cleanPath === '/api/admin/logout') {
+    return { success: true };
+  }
+
+  // Quyidagilar faqat admin uchun
+  if (cleanPath.startsWith('/api/admin/') && !localIsAdmin(headers)) {
+    throw localError(403, 'Ruxsat rad etildi! Faqat Admin kira oladi.');
+  }
+
+  // GET /api/admin/overview
+  if (method === 'GET' && cleanPath === '/api/admin/overview') {
+    const db = localReadDB();
+    return {
+      users: db.users || [],
+      appointments: db.appointments || [],
+      messages: db.messages || [],
+      doctors: db.doctors.map(({ pinHash, ...d }) => d)
+    };
+  }
+
+  // PATCH /api/admin/appointments/:id/status
+  if (method === 'PATCH' && (m = cleanPath.match(/^\/api\/admin\/appointments\/([^/]+)\/status$/))) {
+    const status = localSanitize(body.status);
+    if (!['Kutilmoqda', 'Tasdiqlandi', 'Bekor qilindi', 'Yakunlandi'].includes(status)) throw localError(400, "Noto'g'ri status!");
+    const db = localReadDB();
+    const item = db.appointments.find(a => String(a.id) === String(m[1]));
+    if (!item) throw localError(404, 'Qabul topilmadi!');
+    item.status = status;
+    localWriteDB(db);
+    return { success: true, appointment: item, doctors: localPublicDoctors(db.doctors, db.appointments) };
+  }
+
+  // POST /api/admin/messages
+  if (method === 'POST' && cleanPath === '/api/admin/messages') {
+    const phone = localSanitize(body.phone);
+    const patientName = localSanitize(body.patientName) || 'Mijoz';
+    const text = localSanitize(body.text);
+    if (!phone || text.length < 2) throw localError(400, 'Telefon raqam va xabar matni majburiy!');
+    const db = localReadDB();
+    if (!db.messages) db.messages = [];
+    const message = { id: Date.now(), phone, patientName, text, sentAt: localNow() };
+    db.messages.unshift(message);
+    localWriteDB(db);
+    return { success: true, message };
+  }
+
+  // POST /api/admin/doctors
+  if (method === 'POST' && cleanPath === '/api/admin/doctors') {
+    const name = localSanitize(body.name);
+    const specialty = localSanitize(body.specialty);
+    const room = localSanitize(body.room);
+    const region = localSanitize(body.region);
+    const district = localSanitize(body.district) || 'Markaziy sh.';
+    const clinic = localSanitize(body.clinic);
+    const login = localSanitize(body.login).toLowerCase();
+    const pin = String(body.pin || '').trim();
+    if (!name || !specialty || !clinic || !login || pin.length < 4) throw localError(400, "Barcha maydonlarni to'ldiring (PIN kamida 4 belgi)!");
+    const db = localReadDB();
+    if (db.doctors.some(d => String(d.login).toLowerCase() === login)) throw localError(409, 'Bu login band! Boshqa login tanlang.');
+    db.doctors.unshift({
+      id: Date.now(), name, specialty, region, district, clinic, clinicType: 'Davlat', room,
+      experience: '8 yil', rating: 5.0, price: "45 000 so'm",
+      prefix: specialty.slice(0, 1).toUpperCase(), login, pinHash: simpleHash(pin),
+      avatar: 'https://images.unsplash.com/photo-1612349317150-e413f6a5b16d?w=200&auto=format&fit=crop&q=80',
+      bookedSlots: []
+    });
+    localWriteDB(db);
+    return { success: true, doctors: localPublicDoctors(db.doctors, db.appointments) };
+  }
+
+  // DELETE /api/admin/doctors/:id
+  if (method === 'DELETE' && (m = cleanPath.match(/^\/api\/admin\/doctors\/([^/]+)$/))) {
+    const docId = Number(m[1]);
+    const db = localReadDB();
+    if (db.doctors.length <= 1) throw localError(400, 'Tizimda kamida 1 ta shifokor qolishi kerak!');
+    db.doctors = db.doctors.filter(d => Number(d.id) !== docId);
+    db.appointments = db.appointments.filter(a => Number(a.doctorId) !== docId);
+    localWriteDB(db);
+    return { success: true };
+  }
+
+  throw localError(404, `Offlayn rejimda bu yo'l yo'q: ${method} ${cleanPath}`);
+}
+
+function enableOfflineMode(reason) {
+  if (offlineMode) return;
+  offlineMode = true;
+  console.warn('Offlayn rejim yoqildi:', reason);
+
+  const show = () => {
+    if (document.getElementById('offline-banner')) return;
+    const bar = document.createElement('div');
+    bar.id = 'offline-banner';
+    bar.style.cssText = 'background:#fef3c7;color:#92400e;border-bottom:1px solid #fcd34d;padding:8px 14px;font-size:12px;font-weight:600;text-align:center;';
+    bar.innerHTML =
+      "⚠️ Offlayn rejim: server topilmadi, ma'lumotlar shu brauzer (Chrome) xotirasida saqlanmoqda — boshqa qurilmalarda ko'rinmaydi. " +
+      '<button id="offline-retry" style="text-decoration:underline;margin-left:8px;">Serverni qayta tekshirish</button>' +
+      '<button id="offline-reset" style="text-decoration:underline;margin-left:8px;">Offlayn ma\'lumotlarni tozalash</button>';
+    document.body.prepend(bar);
+    document.getElementById('offline-retry').onclick = () => location.reload();
+    document.getElementById('offline-reset').onclick = () => {
+      if (confirm("Offlayn rejimdagi barcha talonlar va ma'lumotlar o'chiriladi. Davom etasizmi?")) {
+        localStorage.removeItem(LOCAL_DB_KEY);
+        localStorage.removeItem('doctime_public_doctors');
+        localStorage.removeItem('doctime_public_queue');
+        localStorage.removeItem('doctime_public_messages');
+        localStorage.removeItem('doctime_my_tickets');
+        sessionStorage.clear();
+        location.reload();
+      }
+    };
+  };
+  if (document.body) show(); else window.addEventListener('DOMContentLoaded', show);
+}
+
+// ===== SERVER BILAN ISHLASH (xatoni aniq ko'rsatadigan yordamchi) =====
+// Agar frontend serverdan alohida ochilsa (masalan Live Server), bu yerga server manzilini yozing:
+// const API_BASE = 'http://localhost:3000';
+const API_BASE = '';
+
+async function apiFetch(path, options = {}) {
+  // Server topilmagan bo'lsa — Chrome xotirasidagi zaxira rejim ishlaydi
+  if (offlineMode) return localApi(path, options);
+
+  let res;
+  try {
+    res = await fetch(API_BASE + path, options);
+  } catch (e) {
+    enableOfflineMode("Serverga ulanib bo'lmadi");
+    return localApi(path, options);
+  }
+
+  let data = null;
+  const text = await res.text();
+  if (text) {
+    try { data = JSON.parse(text); } catch (e) { data = null; }
+  }
+
+  // Javob JSON emas (Live Server, 404 sahifa va h.k.) — demak haqiqiy server yo'q
+  if (data === null) {
+    enableOfflineMode(`Server JSON qaytarmadi (${res.status}) — ${path}`);
+    return localApi(path, options);
+  }
+
+  if (!res.ok) {
+    const err = new Error(data.error || `Server xatosi (${res.status}): ${path}`);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  return data;
+}
+
+function authHeaders(extra = {}) {
+  const h = { 'Content-Type': 'application/json', ...extra };
+  if (adminToken) h['x-admin-token'] = adminToken;
+  if (doctorToken) h['x-doctor-token'] = doctorToken;
+  return h;
+}
+
 function saveLocalCache() {
   localStorage.setItem('doctime_public_doctors', JSON.stringify(doctors));
   localStorage.setItem('doctime_public_queue', JSON.stringify(queue));
@@ -79,9 +441,8 @@ function saveLocalCache() {
 
 async function loadFromServerDB() {
   try {
-    const res = await fetch('/api/data');
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await apiFetch('/api/data');
+    if (!data) return;
     if (data.doctors) doctors = data.doctors;
     if (data.appointments) queue = data.appointments;
     if (data.messages) messagesList = data.messages;
@@ -90,7 +451,7 @@ async function loadFromServerDB() {
     renderTablo();
     renderMyTickets();
   } catch (err) {
-    console.warn("Server bilan aloqa yo'q, lokal kesh ishlatilmoqda.");
+    console.warn("Server bilan aloqa yo'q, lokal kesh ishlatilmoqda:", err.message);
   }
 }
 
@@ -263,7 +624,8 @@ function renderDoctors() {
 
 function openBookingModal(docId, defaultSlot) {
   activeBookingDocId = docId;
-  const doc = doctors.find(d => d.id === docId);
+  const doc = doctors.find(d => String(d.id) === String(docId));
+  if (!doc) return;
   const booked = doc.bookedSlots || [];
   const free = ALL_TIME_SLOTS.filter(s => !booked.includes(s));
   selectedSlotTime = defaultSlot || free[0] || '';
@@ -279,7 +641,8 @@ function openBookingModal(docId, defaultSlot) {
 }
 
 function renderModalSlots() {
-  const doc = doctors.find(d => d.id === activeBookingDocId);
+  const doc = doctors.find(d => String(d.id) === String(activeBookingDocId));
+  if (!doc) return;
   const booked = doc.bookedSlots || [];
   const container = document.getElementById('modal-slots-grid');
 
@@ -314,7 +677,8 @@ function closeBookingModal() {
 
 function formatPhone(input) {
   let digits = input.value.replace(/\D/g, '');
-  if (!digits.startsWith('998')) digits = '998' + digits;
+  if (digits.length < 3 && '998'.startsWith(digits)) digits = '998';
+  else if (!digits.startsWith('998')) digits = '998' + digits;
   digits = digits.slice(0, 12);
   let res = '+998';
   if (digits.length > 3) res += ' ' + digits.slice(3, 5);
@@ -332,60 +696,68 @@ async function submitBooking(e) {
   const email = (document.getElementById('patient-email-input')?.value || '').trim();
   const date = document.getElementById('booking-date-input')?.value || getTashkentDateISO();
   const errEl = document.getElementById('booking-error');
+  const showErr = (msg) => { errEl.textContent = msg; errEl.classList.remove('hidden'); };
 
-  if (!selectedSlotTime) {
-    errEl.textContent = "Iltimos, bo'sh soatlardan birini tanlang!";
-    errEl.classList.remove('hidden');
-    return;
-  }
-  if (name.length < 3) {
-    errEl.textContent = "Ism-sharifingiz kamida 3 ta harfdan iborat bo'lishi kerak!";
-    errEl.classList.remove('hidden');
-    return;
-  }
-  if (!/^\+998 \d{2} \d{3} \d{2} \d{2}$/.test(phone)) {
-    errEl.textContent = "Telefon raqamingizni to'liq kiriting (+998 XX XXX XX XX)!";
-    errEl.classList.remove('hidden');
-    return;
-  }
+  if (!selectedSlotTime) return showErr("Iltimos, bo'sh soatlardan birini tanlang!");
+  if (name.length < 3) return showErr("Ism-sharifingiz kamida 3 ta harfdan iborat bo'lishi kerak!");
+  if (!/^\+998 \d{2} \d{3} \d{2} \d{2}$/.test(phone)) return showErr("Telefon raqamingizni to'liq kiriting (+998 XX XXX XX XX)!");
 
+  const bookedTime = selectedSlotTime;
+  const bookedDocId = activeBookingDocId;
+
+  // 1) Faqat server so'rovi shu yerda tekshiriladi
+  let result;
   try {
-    const res = await fetch('/api/appointments', {
+    result = await apiFetch('/api/appointments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         patientName: name,
         phone,
         email,
-        doctorId: activeBookingDocId,
+        doctorId: bookedDocId,
         date,
-        time: selectedSlotTime
+        time: bookedTime
       })
     });
-
-    const result = await res.json();
-    if (!res.ok) {
-      errEl.textContent = result.error || "Qabulga yozilishda xatolik!";
-      errEl.classList.remove('hidden');
+  } catch (err) {
+    showErr(err.message);
+    if (err.kind !== 'network') {
       await loadFromServerDB();
       renderModalSlots();
-      return;
     }
+    return;
+  }
 
-    if (result.doctors) doctors = result.doctors;
+  if (!result || !result.appointment) {
+    return showErr("Server kutilmagan javob qaytardi (appointment topilmadi). Server kodini tekshiring.");
+  }
+
+  // 2) Muvaffaqiyatli saqlandi — qolgan interfeys yangilanishi server xatosi emas
+  try {
+    if (result.doctors) {
+      doctors = result.doctors;
+    } else {
+      const doc = doctors.find(d => String(d.id) === String(bookedDocId));
+      if (doc) doc.bookedSlots = [...(doc.bookedSlots || []), bookedTime];
+    }
     queue.push(result.appointment);
     myTicketIds.unshift(result.appointment.id);
     saveLocalCache();
 
     closeBookingModal();
     document.getElementById('patient-name-input').value = '';
-    if (document.getElementById('patient-email-input')) document.getElementById('patient-email-input').value = '';
+    const emailEl = document.getElementById('patient-email-input');
+    if (emailEl) emailEl.value = '';
+    selectedSlotTime = '';
+    errEl.classList.add('hidden');
     renderDoctors();
-    showToast(`✅ Bazaga saqlandi! Talon: ${result.appointment.ticketNo} (${date}, ${selectedSlotTime})`);
+    showToast(`✅ Bazaga saqlandi! Talon: ${result.appointment.ticketNo || ''} (${date}, ${bookedTime})`);
     switchTab('tickets');
-  } catch (err) {
-    errEl.textContent = "Server bilan bog'lanishda xatolik yuz berdi!";
-    errEl.classList.remove('hidden');
+  } catch (uiErr) {
+    console.error('Interfeysni yangilashda xato:', uiErr);
+    closeBookingModal();
+    loadFromServerDB();
   }
 }
 
@@ -486,13 +858,11 @@ function renderMyTickets() {
 
 async function cancelTicket(id) {
   try {
-    const res = await fetch(`/api/appointments/${id}/cancel`, { method: 'POST' });
-    if (res.ok) {
-      await loadFromServerDB();
-      showToast("Talon bekor qilindi va shifokor vaqti bo'shatildi!");
-    }
+    await apiFetch(`/api/appointments/${id}/cancel`, { method: 'POST' });
+    await loadFromServerDB();
+    showToast("Talon bekor qilindi va shifokor vaqti bo'shatildi!");
   } catch (err) {
-    showToast("Bekor qilishda xatolik!");
+    showToast(err.message || "Bekor qilishda xatolik!");
   }
 }
 
@@ -503,31 +873,32 @@ async function handleDoctorOnlyLogin(e) {
   const pin = document.getElementById('doc-pin-input').value.trim();
   const err = document.getElementById('doc-auth-error');
 
+  let data;
   try {
-    const res = await fetch('/api/doctor/login', {
+    data = await apiFetch('/api/doctor/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login, pin })
     });
-    const data = await res.json();
-    if (!res.ok) {
-      err.textContent = data.error || "Login yoki PIN-kod xato!";
-      err.classList.remove('hidden');
-      return;
-    }
-
-    doctorToken = data.token;
-    loggedInDoctor = data.doctor;
-    sessionStorage.setItem('medqueue_doc_token', doctorToken);
-    sessionStorage.setItem('medqueue_doc_info', JSON.stringify(loggedInDoctor));
-    err.classList.add('hidden');
-    document.getElementById('doc-pin-input').value = '';
-    renderDoctorPanel();
-    showToast(`👨‍⚕️ Xush kelibsiz, ${loggedInDoctor.name}!`);
   } catch (error) {
-    err.textContent = "Server bilan aloqa xatosi!";
+    err.textContent = error.message || "Login yoki PIN-kod xato!";
     err.classList.remove('hidden');
+    return;
   }
+  if (!data || !data.token || !data.doctor) {
+    err.textContent = "Server kutilmagan javob qaytardi (token yoki doctor yo'q).";
+    err.classList.remove('hidden');
+    return;
+  }
+
+  doctorToken = data.token;
+  loggedInDoctor = data.doctor;
+  sessionStorage.setItem('medqueue_doc_token', doctorToken);
+  sessionStorage.setItem('medqueue_doc_info', JSON.stringify(loggedInDoctor));
+  err.classList.add('hidden');
+  document.getElementById('doc-pin-input').value = '';
+  renderDoctorPanel();
+  showToast(`👨‍⚕️ Xush kelibsiz, ${loggedInDoctor.name}!`);
 }
 
 function logoutDoctor() {
@@ -590,31 +961,31 @@ async function handleAdminLogin(e) {
   const pin = document.getElementById('admin-pin-input').value.trim();
   const err = document.getElementById('admin-auth-error');
 
+  let data;
   try {
-    const res = await fetch('/api/admin/login', {
+    data = await apiFetch('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ login, pin })
     });
-    const data = await res.json();
-
-    if (!res.ok) {
-      err.textContent = data.error || "Login yoki parol xato!";
-      err.classList.remove('hidden');
-      return;
-    }
-
-    adminToken = data.token;
-    sessionStorage.setItem('medqueue_admin_token', adminToken);
-    isAdminLoggedIn = true;
-    err.classList.add('hidden');
-    document.getElementById('admin-pin-input').value = '';
-    await fetchAdminOverview();
-    showToast("👑 Server orqali Admin tasdiqlandi!");
   } catch (error) {
-    err.textContent = "Server bilan bog'lanishda xatolik!";
+    err.textContent = error.message || "Login yoki parol xato!";
     err.classList.remove('hidden');
+    return;
   }
+  if (!data || !data.token) {
+    err.textContent = "Server kutilmagan javob qaytardi (token yo'q).";
+    err.classList.remove('hidden');
+    return;
+  }
+
+  adminToken = data.token;
+  sessionStorage.setItem('medqueue_admin_token', adminToken);
+  isAdminLoggedIn = true;
+  err.classList.add('hidden');
+  document.getElementById('admin-pin-input').value = '';
+  await fetchAdminOverview();
+  showToast("👑 Server orqali Admin tasdiqlandi!");
 }
 
 async function logoutAdmin() {
@@ -637,46 +1008,40 @@ async function fetchAdminOverview() {
     renderAdminPanel();
     return;
   }
-
   try {
-    const res = await fetch('/api/admin/overview', {
+    const data = await apiFetch('/api/admin/overview', {
       headers: { 'x-admin-token': adminToken }
     });
-    if (res.status === 403) {
+    adminUsersList = (data && data.users) || [];
+    queue = (data && data.appointments) || [];
+    messagesList = (data && data.messages) || [];
+    isAdminLoggedIn = true;
+    renderAdminPanel();
+  } catch (err) {
+    if (err.status === 401 || err.status === 403) {
       adminToken = '';
       isAdminLoggedIn = false;
       sessionStorage.removeItem('medqueue_admin_token');
       renderAdminPanel();
       return;
     }
-    const data = await res.json();
-    adminUsersList = data.users || [];
-    queue = data.appointments || [];
-    messagesList = data.messages || [];
-    isAdminLoggedIn = true;
-    renderAdminPanel();
-  } catch (err) {
     console.error(err);
+    showToast(err.message);
   }
 }
 
 async function updateAppointmentStatus(id, newStatus) {
   try {
-    const res = await fetch(`/api/admin/appointments/${id}/status`, {
+    await apiFetch(`/api/admin/appointments/${id}/status`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-token': adminToken
-      },
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
       body: JSON.stringify({ status: newStatus })
     });
-    if (res.ok) {
-      await loadFromServerDB();
-      await fetchAdminOverview();
-      showToast(`✅ Qabul holati "${newStatus}" deb o'zgartirildi!`);
-    }
+    await loadFromServerDB();
+    await fetchAdminOverview();
+    showToast(`✅ Qabul holati "${newStatus}" deb o'zgartirildi!`);
   } catch (err) {
-    showToast("Statusni o'zgartirishda xatolik!");
+    showToast(err.message || "Statusni o'zgartirishda xatolik!");
   }
 }
 
@@ -702,26 +1067,21 @@ async function submitSendMessage(e) {
   if (!text) return;
 
   try {
-    const res = await fetch('/api/admin/messages', {
+    await apiFetch('/api/admin/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-token': adminToken
-      },
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
       body: JSON.stringify({
         patientName: activeMsgTarget.name,
         phone: activeMsgTarget.phone,
         text
       })
     });
-    if (res.ok) {
-      closeMessageModal();
-      await loadFromServerDB();
-      await fetchAdminOverview();
-      showToast(`📩 Xabar ${activeMsgTarget.name} (${activeMsgTarget.phone}) ga yuborildi!`);
-    }
+    closeMessageModal();
+    await loadFromServerDB();
+    await fetchAdminOverview();
+    showToast(`📩 Xabar ${activeMsgTarget.name} (${activeMsgTarget.phone}) ga yuborildi!`);
   } catch (err) {
-    showToast("Xabar yuborishda xatolik!");
+    showToast(err.message || "Xabar yuborishda xatolik!");
   }
 }
 
@@ -854,47 +1214,36 @@ function renderAdminPanel() {
 
 async function callNextPatient(docId) {
   try {
-    const headers = { 'Content-Type': 'application/json' };
-    if (adminToken) headers['x-admin-token'] = adminToken;
-    if (doctorToken) headers['x-doctor-token'] = doctorToken;
-
-    const res = await fetch(`/api/doctor/${docId}/call-next`, {
+    const data = await apiFetch(`/api/doctor/${docId}/call-next`, {
       method: 'POST',
-      headers
+      headers: authHeaders()
     });
-    const data = await res.json();
-    if (res.ok) {
-      await loadFromServerDB();
-      if (isAdminLoggedIn) await fetchAdminOverview();
-      renderDoctorPanel();
-      renderTablo();
-      if (data.calledTicket) {
-        showToast(`📢 ${data.calledTicket.ticketNo} (${data.calledTicket.patientName}) xonaga chaqirildi!`);
-      } else {
-        showToast("Kutayotgan bemorlar qolmadi.");
-      }
+    await loadFromServerDB();
+    if (isAdminLoggedIn) await fetchAdminOverview();
+    renderDoctorPanel();
+    renderTablo();
+    if (data && data.calledTicket) {
+      showToast(`📢 ${data.calledTicket.ticketNo} (${data.calledTicket.patientName}) xonaga chaqirildi!`);
+    } else {
+      showToast("Kutayotgan bemorlar qolmadi.");
     }
   } catch (err) {
-    showToast("Chaqirishda xatolik!");
+    showToast(err.message || "Chaqirishda xatolik!");
   }
 }
 
 async function deleteDoctor(docId) {
+  if (!confirm("Shifokorni bazadan o'chirishni tasdiqlaysizmi?")) return;
   try {
-    const res = await fetch(`/api/admin/doctors/${docId}`, {
+    await apiFetch(`/api/admin/doctors/${docId}`, {
       method: 'DELETE',
       headers: { 'x-admin-token': adminToken }
     });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(data.error || "O'chirishda xatolik!");
-      return;
-    }
     await loadFromServerDB();
     await fetchAdminOverview();
     showToast("🗑️ Shifokor bazadan o'chirildi.");
   } catch (err) {
-    showToast("Server xatosi!");
+    showToast(err.message || "O'chirishda xatolik!");
   }
 }
 
@@ -923,19 +1272,11 @@ async function submitNewDoctor(e) {
   };
 
   try {
-    const res = await fetch('/api/admin/doctors', {
+    await apiFetch('/api/admin/doctors', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin-token': adminToken
-      },
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
       body: JSON.stringify(payload)
     });
-    const data = await res.json();
-    if (!res.ok) {
-      showToast(data.error || "Shifokor qo'shishda xatolik!");
-      return;
-    }
     closeAddDoctorModal();
     document.getElementById('new-doc-name').value = '';
     document.getElementById('new-doc-clinic').value = '';
@@ -943,8 +1284,70 @@ async function submitNewDoctor(e) {
     document.getElementById('new-doc-pin').value = '';
     await loadFromServerDB();
     await fetchAdminOverview();
-    showToast(`✅ ${payload.name} xeshlangan parol bilan bazaga saqlandi!`);
+    showToast(`✅ ${payload.name} bazaga saqlandi!`);
   } catch (err) {
-    showToast("Server xatosi!");
+    showToast(err.message || "Shifokor qo'shishda xatolik!");
+  }
+}
+
+// ===== HTML'da chaqirilgan, lekin avval yozilmagan funksiyalar =====
+function quickFillDoc(login, pin) {
+  document.getElementById('doc-login-input').value = login;
+  document.getElementById('doc-pin-input').value = pin;
+}
+
+function quickFillAdmin(login, pin) {
+  document.getElementById('admin-login-input').value = login;
+  document.getElementById('admin-pin-input').value = pin;
+}
+
+function openWalkInModal() {
+  const sel = document.getElementById('walkin-doc-select');
+  sel.innerHTML = doctors.map(d => `<option value="${d.id}">${d.name} — ${d.specialty} (${d.room})</option>`).join('');
+  const m = document.getElementById('walkin-modal');
+  m.classList.remove('hidden');
+  m.classList.add('flex');
+}
+
+function closeWalkInModal() {
+  const m = document.getElementById('walkin-modal');
+  m.classList.add('hidden');
+  m.classList.remove('flex');
+}
+
+async function submitWalkInTicket(e) {
+  e.preventDefault();
+  const docId = document.getElementById('walkin-doc-select').value;
+  const name = document.getElementById('walkin-patient-name').value.trim();
+  const phone = document.getElementById('walkin-patient-phone').value.trim();
+
+  if (name.length < 3) return showToast("Bemor ismini to'liq kiriting!");
+  if (!/^\+998 \d{2} \d{3} \d{2} \d{2}$/.test(phone)) return showToast("Telefon raqamini to'liq kiriting (+998 XX XXX XX XX)!");
+
+  const doc = doctors.find(d => String(d.id) === String(docId));
+  if (!doc) return showToast("Shifokor topilmadi!");
+  const free = ALL_TIME_SLOTS.filter(s => !(doc.bookedSlots || []).includes(s));
+  if (free.length === 0) return showToast("Bu shifokorda bugun bo'sh vaqt qolmagan!");
+
+  try {
+    const result = await apiFetch('/api/appointments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-token': adminToken },
+      body: JSON.stringify({
+        patientName: name,
+        phone,
+        email: '',
+        doctorId: doc.id,
+        date: getTashkentDateISO(),
+        time: free[0]
+      })
+    });
+    closeWalkInModal();
+    document.getElementById('walkin-patient-name').value = '';
+    await loadFromServerDB();
+    await fetchAdminOverview();
+    showToast(`✅ Talon berildi: ${(result && result.appointment && result.appointment.ticketNo) || ''} (${free[0]})`);
+  } catch (err) {
+    showToast(err.message || "Talon chiqarishda xatolik!");
   }
 }
