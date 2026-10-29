@@ -1,7 +1,12 @@
-// 1. TIL LUG'ATI (UZ, RU, EN)
+// 1. TIL LUG'ATI (UZ, RU, EN) — RASMDAGI MATNLAR BILAN
 const TRANSLATIONS = {
   uz: {
     subtitle: "Elektron navbat tizimi",
+    hero_badge: "O'zbekiston bo'ylab 5 000+ malakali shifokorlar",
+    hero_title_1: "Shifokorga navbat",
+    hero_title_2: "kutmasdan",
+    hero_title_3: "onlayn yoziling",
+    hero_desc: "Viloyat va tumaningizni tanlang — sizga eng yaqin davlat va xususiy shifoxonalardagi mutaxassislarni ko'rsatamiz. Aniq vaqt belgilab, koridordagi uzun navbatlarni unuting.",
     nav_book: "Qabulga yozilish",
     nav_tablo: "Jonli Tablo",
     nav_ticket: "Mening talonim",
@@ -90,6 +95,11 @@ const TRANSLATIONS = {
   },
   ru: {
     subtitle: "Электронная система очередей",
+    hero_badge: "Более 5 000+ квалифицированных врачей по Узбекистану",
+    hero_title_1: "Запись к врачу",
+    hero_title_2: "без очередей",
+    hero_title_3: "в онлайн режиме",
+    hero_desc: "Выберите регион и район — покажем специалистов в ближайших государственных и частных клиниках. Выберите точное время и забудьте о долгих очередях в коридорах.",
     nav_book: "Запись на прием",
     nav_tablo: "Онлайн Табло",
     nav_ticket: "Мой талон",
@@ -178,6 +188,11 @@ const TRANSLATIONS = {
   },
   en: {
     subtitle: "Electronic Queue Management System",
+    hero_badge: "5,000+ certified doctors across Uzbekistan",
+    hero_title_1: "Book doctor visits",
+    hero_title_2: "without waiting",
+    hero_title_3: "online & hassle-free",
+    hero_desc: "Select your region and district — discover top specialists in nearby public and private medical centers. Schedule an exact time and skip the long hallway queues.",
     nav_book: "Book Appointment",
     nav_tablo: "Live Tablo",
     nav_ticket: "My Ticket",
@@ -333,6 +348,11 @@ function updateStaticTexts() {
 
   const ids = {
     't-subtitle': t('subtitle'),
+    't-hero-badge': t('hero_badge'),
+    't-hero-title-1': t('hero_title_1'),
+    't-hero-title-2': t('hero_title_2'),
+    't-hero-title-3': t('hero_title_3'),
+    't-hero-desc': t('hero_desc'),
     't-nav-book': t('nav_book'),
     't-nav-tablo': t('nav_tablo'),
     't-nav-ticket': t('nav_ticket'),
