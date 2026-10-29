@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MedQueue UZ — Elektron Navbat Tizimi</title>
+  <title>MedQueue UZ</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <link rel="stylesheet" href="style.css" />
@@ -30,32 +30,39 @@
             Med<span class="text-teal-600">Queue</span>
             <span class="ml-1.5 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">UZ</span>
           </div>
-          <p class="text-[11px] text-slate-500 hidden xl:block">Elektron navbat tizimi</p>
+          <p id="t-subtitle" class="text-[11px] text-slate-500 hidden xl:block"></p>
         </div>
       </button>
 
-      <!-- Kompyuter uchun menyu -->
+      <!-- Kompyuter uchun navigatsiya -->
       <nav class="hidden md:flex items-center gap-1 bg-teal-50/80 p-1.5 rounded-2xl border border-teal-100">
         <button id="nav-home" onclick="switchTab('home')" class="nav-btn active-nav px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
-          <i data-lucide="calendar" class="w-4 h-4"></i><span>Qabulga yozilish</span>
+          <i data-lucide="calendar" class="w-4 h-4"></i><span id="t-nav-book"></span>
         </button>
         <button id="nav-tablo" onclick="switchTab('tablo')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
-          <i data-lucide="tv" class="w-4 h-4 text-emerald-600"></i><span>Jonli Tablo</span>
+          <i data-lucide="tv" class="w-4 h-4 text-emerald-600"></i><span id="t-nav-tablo"></span>
         </button>
         <button id="nav-tickets" onclick="switchTab('tickets')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
-          <i data-lucide="qr-code" class="w-4 h-4"></i><span>Mening talonim</span>
+          <i data-lucide="qr-code" class="w-4 h-4"></i><span id="t-nav-ticket"></span>
           <span id="my-ticket-badge" class="px-1.5 py-0.5 text-[11px] rounded-full bg-teal-600 text-white font-bold">0</span>
         </button>
         <button id="nav-doctor" onclick="switchTab('doctor')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
-          <i data-lucide="user-check" class="w-4 h-4 text-teal-600"></i><span>Shifokor paneli</span>
+          <i data-lucide="user-check" class="w-4 h-4 text-teal-600"></i><span id="t-nav-doctor"></span>
         </button>
         <button id="nav-admin" onclick="switchTab('admin')" class="nav-btn px-3 py-2 rounded-xl text-xs lg:text-sm font-semibold transition-all flex items-center gap-1.5">
-          <i data-lucide="shield-check" class="w-4 h-4 text-amber-600"></i><span>Admin panel</span>
+          <i data-lucide="shield-check" class="w-4 h-4 text-amber-600"></i><span id="t-nav-admin"></span>
         </button>
       </nav>
 
+      <!-- Til almashtirish (UZ / RU / EN) va Soat -->
       <div class="flex items-center gap-2">
-        <div class="flex items-center gap-1.5 bg-slate-100/90 px-3 py-1.5 rounded-xl border border-slate-200/70 text-xs font-semibold text-slate-600">
+        <div class="flex items-center bg-teal-50 border border-teal-200 rounded-xl p-0.5 text-xs font-bold">
+          <button onclick="setLanguage('uz')" id="lang-btn-uz" class="px-2 py-1 rounded-lg transition-all">UZ</button>
+          <button onclick="setLanguage('ru')" id="lang-btn-ru" class="px-2 py-1 rounded-lg transition-all">RU</button>
+          <button onclick="setLanguage('en')" id="lang-btn-en" class="px-2 py-1 rounded-lg transition-all">EN</button>
+        </div>
+
+        <div class="flex items-center gap-1.5 bg-slate-100/90 px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-200/70 text-xs font-semibold text-slate-600">
           <i data-lucide="clock" class="w-3.5 h-3.5 text-teal-600"></i>
           <span id="live-clock">00:00</span>
         </div>
@@ -70,20 +77,16 @@
     <div id="tab-home" class="tab-section">
       <section class="py-6 sm:py-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="bg-white rounded-3xl p-5 sm:p-7 shadow-sm border border-teal-100 mb-6">
-          <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900 mb-2">Viloyat va shifokorni tanlang</h2>
-          <p class="text-xs sm:text-sm text-slate-500 mb-4">O'z hududingizni belgilang va bo'sh soatni tanlab talon oling</p>
+          <h2 id="t-sec-title" class="text-xl sm:text-2xl font-extrabold text-slate-900 mb-2"></h2>
+          <p id="t-sec-desc" class="text-xs sm:text-sm text-slate-500 mb-4"></p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Viloyat</label>
-              <select id="region-select" onchange="handleRegionChange()" class="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-teal-500">
-                <option value="">Barcha viloyatlar</option>
-              </select>
+              <label id="t-label-region" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
+              <select id="region-select" onchange="handleRegionChange()" class="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-medium focus:ring-2 focus:ring-teal-500"></select>
             </div>
             <div>
-              <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tuman / Shahar</label>
-              <select id="district-select" onchange="renderDoctors()" disabled class="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-medium disabled:opacity-50 focus:ring-2 focus:ring-teal-500">
-                <option value="">Avval viloyatni tanlang</option>
-              </select>
+              <label id="t-label-district" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
+              <select id="district-select" onchange="renderDoctors()" disabled class="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 text-sm font-medium disabled:opacity-50 focus:ring-2 focus:ring-teal-500"></select>
             </div>
           </div>
         </div>
@@ -100,18 +103,18 @@
     <div id="tab-tablo" class="tab-section hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-2xl border border-teal-500/30">
         <div class="flex justify-between items-center mb-6">
-          <h2 class="text-xl sm:text-2xl font-extrabold tracking-tight">JONLI NAVBAT TABLOSI</h2>
+          <h2 id="t-tablo-main" class="text-xl sm:text-2xl font-extrabold tracking-tight"></h2>
           <span class="flex items-center gap-1.5 text-xs font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/40 px-3 py-1.5 rounded-full">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Jonli
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> <span id="t-tablo-live"></span>
           </span>
         </div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div class="bg-slate-800/70 rounded-2xl p-5 border border-emerald-500/30">
-            <h3 class="text-sm font-extrabold uppercase text-emerald-400 mb-4">Hozir xonada (Qabulda)</h3>
+            <h3 id="t-tablo-in-room" class="text-sm font-extrabold uppercase text-emerald-400 mb-4"></h3>
             <div id="tablo-inprogress" class="space-y-3"></div>
           </div>
           <div class="bg-slate-800/70 rounded-2xl p-5 border border-amber-500/30">
-            <h3 class="text-sm font-extrabold uppercase text-amber-400 mb-4">Navbat kutayotganlar</h3>
+            <h3 id="t-tablo-wait-room" class="text-sm font-extrabold uppercase text-amber-400 mb-4"></h3>
             <div id="tablo-waiting" class="space-y-3"></div>
           </div>
         </div>
@@ -121,7 +124,7 @@
     <!-- 3. MENING TALONIM -->
     <div id="tab-tickets" class="tab-section hidden max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
-        <h2 class="text-xl sm:text-2xl font-extrabold text-slate-900 mb-4">Mening elektron talonlarim</h2>
+        <h2 id="t-myticket-title" class="text-xl sm:text-2xl font-extrabold text-slate-900 mb-4"></h2>
         <div id="my-tickets-list" class="space-y-4"></div>
       </div>
     </div>
@@ -129,19 +132,19 @@
     <!-- 4. SHIFOKOR PANELI -->
     <div id="tab-doctor" class="tab-section hidden max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div id="doctor-login-box" class="max-w-md mx-auto bg-white rounded-3xl p-6 sm:p-8 shadow-xl border border-teal-100">
-        <h2 class="text-xl font-extrabold text-slate-900 mb-1">Shifokor kabineti</h2>
-        <p class="text-xs text-slate-500 mb-4">Kirish uchun login va PIN-kodni tering</p>
+        <h2 id="t-doc-login-title" class="text-xl font-extrabold text-slate-900 mb-1"></h2>
+        <p id="t-doc-login-desc" class="text-xs text-slate-500 mb-4"></p>
         <form onsubmit="handleDoctorLogin(event)" class="space-y-4">
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Login</label>
-            <input id="doc-login" type="text" placeholder="Masalan: kardiolog" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-teal-500" />
+            <label id="t-doc-lbl-login" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
+            <input id="doc-login" type="text" placeholder="kardiolog" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-teal-500" />
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">PIN-kod</label>
-            <input id="doc-pin" type="password" placeholder="Masalan: 2040" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-teal-500" />
+            <label id="t-doc-lbl-pin" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
+            <input id="doc-pin" type="password" placeholder="2040" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-teal-500" />
           </div>
           <p id="doc-auth-err" class="text-xs font-bold text-rose-600 hidden"></p>
-          <button type="submit" class="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm transition-all shadow-md">Kirish</button>
+          <button type="submit" id="t-doc-btn-submit" class="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm transition-all shadow-md"></button>
         </form>
       </div>
       <div id="doctor-dash" class="hidden bg-white rounded-3xl p-6 shadow-sm border border-teal-100">
@@ -150,7 +153,7 @@
             <h2 id="d-name" class="text-2xl font-extrabold text-slate-900"></h2>
             <p id="d-info" class="text-xs text-slate-500"></p>
           </div>
-          <button onclick="logoutDoctor()" class="px-4 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-bold border border-rose-200">Kabinetdan chiqish</button>
+          <button onclick="logoutDoctor()" id="t-btn-doc-logout" class="px-4 py-2 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl text-xs font-bold border border-rose-200"></button>
         </div>
         <div id="d-queue" class="mt-6"></div>
       </div>
@@ -159,31 +162,31 @@
     <!-- 5. ADMIN PANEL -->
     <div id="tab-admin" class="tab-section hidden max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div id="admin-login-box" class="max-w-md mx-auto bg-white rounded-3xl p-6 shadow-xl border border-amber-200">
-        <h2 class="text-xl font-extrabold text-slate-900 mb-1">Admin Panel</h2>
-        <p class="text-xs text-slate-500 mb-4">Login: <strong>admin</strong> | Parol: <strong>7777</strong></p>
+        <h2 id="t-adm-login-title" class="text-xl font-extrabold text-slate-900 mb-1"></h2>
+        <p id="t-adm-login-desc" class="text-xs text-slate-500 mb-4"></p>
         <form onsubmit="handleAdminLogin(event)" class="space-y-4">
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Login</label>
+            <label id="t-adm-lbl-login" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
             <input id="adm-login" type="text" placeholder="admin" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-amber-500" />
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Parol</label>
+            <label id="t-adm-lbl-pin" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
             <input id="adm-pin" type="password" placeholder="7777" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-amber-500" />
           </div>
           <p id="adm-auth-err" class="text-xs font-bold text-rose-600 hidden"></p>
-          <button type="submit" class="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm transition-all shadow-md">Kirish</button>
+          <button type="submit" id="t-adm-btn-submit" class="w-full py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm transition-all shadow-md"></button>
         </form>
       </div>
       <div id="admin-dash" class="hidden space-y-6">
         <div class="bg-white rounded-3xl p-6 shadow-sm border border-teal-100 flex flex-wrap justify-between items-center gap-4">
           <div>
-            <h2 class="text-2xl font-extrabold text-slate-900">Boshqaruv Paneli</h2>
-            <p class="text-xs text-slate-500">Shifokorlar va xonalarni boshqarish</p>
+            <h2 id="t-adm-dash-title" class="text-2xl font-extrabold text-slate-900"></h2>
+            <p id="t-adm-dash-desc" class="text-xs text-slate-500"></p>
           </div>
           <div class="flex flex-wrap gap-2.5">
-            <button onclick="openAddDocModal()" class="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md">+ Shifokor qo'shish</button>
-            <button onclick="resetStorage()" class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold border border-rose-200">Bazani tozalash</button>
-            <button onclick="logoutAdmin()" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">Chiqish</button>
+            <button onclick="openAddDocModal()" id="t-btn-add-doc" class="px-4 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md"></button>
+            <button onclick="resetStorage()" id="t-btn-reset-db" class="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold border border-rose-200"></button>
+            <button onclick="logoutAdmin()" id="t-btn-adm-logout" class="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"></button>
           </div>
         </div>
         <div id="admin-rooms" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
@@ -201,18 +204,18 @@
       </div>
       <form onsubmit="submitBooking(event)" class="space-y-4">
         <div>
-          <label class="block text-xs font-bold uppercase text-slate-500 mb-1.5">Bo'sh vaqtni tanlang</label>
+          <label id="t-lbl-choose-slot" class="block text-xs font-bold uppercase text-slate-500 mb-1.5"></label>
           <div id="m-slots" class="grid grid-cols-3 gap-2"></div>
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Bemor F.I.Sh</label>
-          <input id="p-name" type="text" required placeholder="Ism familiyangiz" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-teal-500" />
+          <label id="t-lbl-patient-name" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
+          <input id="p-name" type="text" required class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-teal-500" />
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Telefon raqam</label>
+          <label id="t-lbl-patient-phone" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
           <input id="p-phone" type="tel" required value="+998 " oninput="formatPhoneInput(this)" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:ring-2 focus:ring-teal-500" />
         </div>
-        <button type="submit" class="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-md transition-all">Talon olish</button>
+        <button type="submit" id="t-btn-confirm-ticket" class="w-full py-3 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-sm shadow-md transition-all"></button>
       </form>
     </div>
   </div>
@@ -221,74 +224,69 @@
   <div id="add-doc-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-xs items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl">
       <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-extrabold text-slate-900">Yangi shifokor qo'shish</h3>
+        <h3 id="t-m-add-title" class="text-lg font-extrabold text-slate-900"></h3>
         <button onclick="closeAddDocModal()" class="text-slate-400 hover:text-slate-600 font-bold p-1">✕</button>
       </div>
       <form onsubmit="submitNewDoc(event)" class="space-y-3">
         <div>
-          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">F.I.Sh</label>
+          <label id="t-m-lbl-name" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
           <input id="nd-name" type="text" required placeholder="Dr. Jasurbek Aliyev" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Mutaxassislik</label>
-            <select id="nd-spec" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm">
-              <option value="Kardiolog">Kardiolog</option>
-              <option value="Pediatr">Pediatr</option>
-              <option value="Stomatolog">Stomatolog</option>
-              <option value="Terapevt">Terapevt</option>
-            </select>
+            <label id="t-m-lbl-spec" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
+            <select id="nd-spec" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm"></select>
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Xona</label>
+            <label id="t-m-lbl-room" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
             <input id="nd-room" type="text" required value="205-xona" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
           </div>
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Viloyat</label>
+            <label id="t-m-lbl-reg" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
             <select id="nd-region" onchange="updateNewDocDistricts()" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm"></select>
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Tuman/Shahar</label>
+            <label id="t-m-lbl-dist" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
             <select id="nd-district" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm"></select>
           </div>
         </div>
         <div>
-          <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Klinika nomi</label>
-          <input id="nd-clinic" type="text" required placeholder="Markaziy Poliklinika" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
+          <label id="t-m-lbl-clinic" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
+          <input id="nd-clinic" type="text" required class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Login</label>
+            <label id="t-m-lbl-login" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
             <input id="nd-login" type="text" required placeholder="shifokor1" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
           </div>
           <div>
-            <label class="block text-xs font-bold uppercase text-slate-500 mb-1">PIN-kod</label>
+            <label id="t-m-lbl-pin" class="block text-xs font-bold uppercase text-slate-500 mb-1"></label>
             <input id="nd-pin" type="text" required placeholder="1234" class="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm" />
           </div>
         </div>
-        <button type="submit" class="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs mt-2 transition-all">Bazaga saqlash</button>
+        <button type="submit" id="t-m-btn-save" class="w-full py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs mt-2 transition-all"></button>
       </form>
     </div>
   </div>
 
-  <!-- MOBIL QURILMALAR UCHUN PASTKI MENYU -->
+  <!-- MOBIL MENYU (PASTKI) -->
   <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-teal-100 px-2 py-1.5 grid grid-cols-5 gap-1 shadow-lg">
     <button onclick="switchTab('home')" class="flex flex-col items-center py-1 text-teal-700 font-bold text-[10px]">
-      <i data-lucide="calendar" class="w-4 h-4 mb-0.5"></i><span>Yozilish</span>
+      <i data-lucide="calendar" class="w-4 h-4 mb-0.5"></i><span id="t-m-nav-book"></span>
     </button>
     <button onclick="switchTab('tablo')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
-      <i data-lucide="tv" class="w-4 h-4 mb-0.5 text-emerald-600"></i><span>Tablo</span>
+      <i data-lucide="tv" class="w-4 h-4 mb-0.5 text-emerald-600"></i><span id="t-m-nav-tablo"></span>
     </button>
     <button onclick="switchTab('tickets')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
-      <i data-lucide="qr-code" class="w-4 h-4 mb-0.5"></i><span>Talonim</span>
+      <i data-lucide="qr-code" class="w-4 h-4 mb-0.5"></i><span id="t-m-nav-ticket"></span>
     </button>
     <button onclick="switchTab('doctor')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
-      <i data-lucide="user-check" class="w-4 h-4 mb-0.5 text-teal-600"></i><span>Shifokor</span>
+      <i data-lucide="user-check" class="w-4 h-4 mb-0.5 text-teal-600"></i><span id="t-m-nav-doctor"></span>
     </button>
     <button onclick="switchTab('admin')" class="flex flex-col items-center py-1 text-slate-600 font-semibold text-[10px]">
-      <i data-lucide="shield-check" class="w-4 h-4 mb-0.5 text-amber-600"></i><span>Admin</span>
+      <i data-lucide="shield-check" class="w-4 h-4 mb-0.5 text-amber-600"></i><span id="t-m-nav-admin"></span>
     </button>
   </nav>
 
